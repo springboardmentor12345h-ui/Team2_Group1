@@ -1,4 +1,5 @@
 const User = require('../models/userModel');
+const bcrypt = require('bcryptjs');
 
 exports.getAllUsers = async (req, res) => {
   const users = await User.find();
@@ -11,6 +12,8 @@ exports.getAllUsers = async (req, res) => {
 };
 
 exports.createUser = async (req, res) => {
+
+  
   const newUser = await User.create({
     name: req.body.name,
     email: req.body.email,
