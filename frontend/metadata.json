@@ -1,0 +1,7 @@
+{
+  "name": "CampusEventHub",
+  "description": "An inter-college event management platform for hosting sports competitions, hackathons, and cultural fests. Features role-based access for students and admins, event registration, and real-time management dashboards.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
