@@ -1,4 +1,5 @@
 const User = require('../models/userModel');
+const AdminLog = require('../models/adminLogModel');
 const jwt = require('jsonwebtoken');
 const { promisify } = require('util');
 
@@ -59,6 +60,12 @@ exports.signup = async (req, res) => {
       passwordConfirm: req.body.passwordConfirm,
       college: req.body.college,
       role: req.body.role,
+    });
+
+    // Add Admin Log
+    await AdminLog.create({
+      action: `New user registered: ${newUser.name} as ${newUser.role}`,
+      user: newUser._id,
     });
 
     createSendToken(newUser, 201, res);
