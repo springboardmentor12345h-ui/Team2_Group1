@@ -52,14 +52,7 @@ exports.getAllUsers = async (req, res) => {
 
 exports.signup = async (req, res) => {
   try {
-    const newUser = await User.create({
-      name: req.body.name,
-      email: req.body.email,
-      password: req.body.password,
-      passwordConfirm: req.body.passwordConfirm,
-      college: req.body.college,
-      role: req.body.role,
-    });
+    const newUser = await User.create(req.body);
 
     createSendToken(newUser, 201, res);
   } catch (error) {
@@ -136,34 +129,25 @@ exports.restrictTo = (...roles) => {
     next();
   };
 };
-
-
-exports.login=async(req, res) =>  {
-   try {
-      const { email, password } = req.body;
-      const user = await User.findOne({ email });
-      if (user){
-        const result = await bcrypt.compare(password,user.passward);
-        if(result) {
-           return res.json({
-            code: 200,
-            message: "Login Successfully....",
-            data: user
-         });
-      }else {
-         res.json({
-            code: 400,
-            message: "invalid credentials",
-            data: ""
-         });
-      }
-      } 
-      
-   } catch (error) {
-      res.json({
-         code: 500,
-         message: "internal server error",
-         data: ""
-      });
-   }
+ 
+// function fetch all logs for the admin dashboard
+exports.getAllUsersHere=async(req,res)=>{
+  try{
+    const logs = await adminLog.find()
+    .populate('user_id', 'role')// show admain Name and Roles(e.g."super Admin")
+    .sort({timestamp: -1});// show newest campus activities first
+    res.status(200).json(logs);
+  }catch(error){
+    res.status(500).json({message:"Error fetching campus logs", error});
+  }
 };
+// helper function to be called eventControllers
+exports.logEventActivity= async(adminId, description)=>{
+  try{ 
+    const log = new adminLog({user_id: adminId, action: description});
+    await log.save();
+  }catch(err){
+    console.error("failed to record log:",err);
+  }
+};
+ 

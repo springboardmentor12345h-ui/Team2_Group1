@@ -60,3 +60,25 @@ userSchema.methods.correctPassword = async function (
 const User = mongoose.model('User', userSchema);
 
 module.exports = User;
+
+// schema of admin_Log model
+const adminLogSchema = new mongoose.Schema({
+  //MongoDB automatically create a unique identifire as '_id'
+
+  action:{
+    type: String,
+    required: true  // Describes what the admin did(e.g. "Deleted User")
+  },
+  user_id:{
+    type: mongoose.Schema.Types.ObjectId,
+    ref:'User',  //The Admin's ID that links to the User table/ collection
+    required: true
+  },
+  timestamp:{
+    type: Date, 
+    default: Date.now   //the time of entry will be saved automatically
+  }
+});
+const adminLog= mongoose.model('adminLog',adminLogSchema);
+
+module.exports = adminLog;
