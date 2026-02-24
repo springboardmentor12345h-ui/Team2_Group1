@@ -1,5 +1,37 @@
 const Event = require('../models/eventModel');
 const AdminLog = require('../models/adminLogModel');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const multerStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = 'uploads/events';
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = file.mimetype.split('/')[1];
+    cb(null, `event-${req.user.id}-${Date.now()}.${ext}`);
+  },
+});
+
+const multerFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Not an image! Please upload only images.'), false);
+  }
+};
+
+const upload = multer({
+  storage: multerStorage,
+  fileFilter: multerFilter,
+});
+
+exports.uploadEventImage = upload.single('image');
 
 exports.getAllEvents = async (req, res) => {
   try {
@@ -35,11 +67,22 @@ exports.getAllEvents = async (req, res) => {
       query = query.sort('-startDate');
     }
 
+    // 4) Pagination & Limit
+    const page = req.query.page * 1 || 1;
+    const limit = req.query.limit * 1 || 100;
+    const skip = (page - 1) * limit;
+
+    // Get total count for pagination (with current filters/search)
+    const totalResults = await Event.countDocuments(query.getFilter());
+
+    query = query.skip(skip).limit(limit);
+
     const events = await query;
 
     res.status(200).json({
       status: 'success',
       results: events.length,
+      totalResults,
       data: {
         events,
       },
@@ -56,6 +99,10 @@ exports.createEvent = async (req, res) => {
   try {
     // Automatically set collegeId from the logged in user
     if (!req.body.collegeId) req.body.collegeId = req.user.id;
+
+    if (req.file) {
+      req.body.image = `/uploads/events/${req.file.filename}`;
+    }
 
     const newEvent = await Event.create(req.body);
 
@@ -101,6 +148,10 @@ exports.getEvent = async (req, res) => {
 
 exports.updateEvent = async (req, res) => {
   try {
+    if (req.file) {
+      req.body.image = `/uploads/events/${req.file.filename}`;
+    }
+
     const event = await Event.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,

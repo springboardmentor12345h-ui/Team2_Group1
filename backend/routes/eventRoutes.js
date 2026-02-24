@@ -10,6 +10,7 @@ router
   .post(
     userController.protect,
     userController.restrictTo('collegeAdmin', 'superAdmin'),
+    eventController.uploadEventImage,
     eventController.createEvent,
   );
 
@@ -19,6 +20,7 @@ router
   .patch(
     userController.protect,
     userController.restrictTo('collegeAdmin', 'superAdmin'),
+    eventController.uploadEventImage,
     eventController.updateEvent,
   )
   .delete(

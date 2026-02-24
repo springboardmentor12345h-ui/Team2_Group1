@@ -10,6 +10,9 @@ const eventSchema = new mongoose.Schema({
     type: String,
     required: [true, 'An event must have a description'],
   },
+  image: {
+    type: String,
+  },
   category: {
     type: String,
     required: [true, 'An event must have a category'],

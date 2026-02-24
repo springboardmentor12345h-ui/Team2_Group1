@@ -14,6 +14,7 @@ const EditEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
     startDate: "",
     endDate: "",
   });
+  const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -37,13 +38,30 @@ const EditEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const handleFileChange = (e) => {
+    setImage(e.target.files[0]);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
+      const dataToSend = new FormData();
+      Object.keys(formData).forEach((key) => {
+        dataToSend.append(key, formData[key]);
+      });
+      if (image) {
+        dataToSend.append("image", image);
+      }
+
       const { data } = await axios.patch(
         `/api/v1/events/${event._id}`,
-        formData,
+        dataToSend,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        },
       );
       toast.success("Event updated successfully!");
       onEventUpdated(data.data.event);
@@ -75,6 +93,17 @@ const EditEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
             required
             placeholder="e.g. Annual Tech Summit"
           />
+          <div>
+            <label className="block text-sm font-medium text-secondary-700 mb-1">
+              Event Poster (Optional update)
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="w-full px-4 py-2 bg-white border border-secondary-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-secondary-900"
+            />
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-secondary-700 mb-1">

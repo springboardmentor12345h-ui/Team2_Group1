@@ -23,6 +23,12 @@ const Events = () => {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All Types");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, category]);
 
   // Modal States
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -32,12 +38,13 @@ const Events = () => {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      let url = "/api/v1/events?";
+      let url = `/api/v1/events?page=${page}&limit=6&`;
       if (query) url += `search=${query}&`;
       if (category !== "All Types") url += `category=${category}&`;
 
       const { data } = await axios.get(url);
       setEvents(data.data.events);
+      setTotalPages(Math.ceil(data.totalResults / 6));
     } catch (error) {
       toast.error("Failed to load events");
     } finally {
@@ -50,7 +57,7 @@ const Events = () => {
       fetchEvents();
     }, 500);
     return () => clearTimeout(timeoutId);
-  }, [query, category]);
+  }, [query, category, page]);
 
   const handleViewDetails = (event) => {
     setSelectedEvent(event);
@@ -171,8 +178,16 @@ const Events = () => {
                     alt={event.title}
                     className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
                   />
-                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold text-secondary-700 shadow-sm border border-white">
-                    Upcoming
+                  <div
+                    className={`absolute top-4 right-4 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-black shadow-lg border uppercase tracking-widest ${
+                      new Date() > new Date(event.endDate)
+                        ? "bg-red-50 text-red-600 border-red-100"
+                        : "bg-success/10 text-success border-success/20"
+                    }`}
+                  >
+                    {new Date() > new Date(event.endDate)
+                      ? "Completed"
+                      : "Upcoming"}
                   </div>
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <span className="bg-white text-secondary-900 px-6 py-2 rounded-full font-bold shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform">
@@ -232,6 +247,52 @@ const Events = () => {
                 </div>
               </Card>
             ))}
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        {!loading && totalPages > 1 && (
+          <div className="flex justify-center items-center gap-4 mt-12 mb-8">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPage((p) => Math.max(1, p - 1));
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              disabled={page === 1}
+              className="px-6 py-2 rounded-xl font-bold border-secondary-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white"
+            >
+              Previous
+            </Button>
+            <div className="flex items-center gap-2">
+              {[...Array(totalPages)].map((_, i) => (
+                <button
+                  key={i + 1}
+                  onClick={() => {
+                    setPage(i + 1);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className={`w-10 h-10 rounded-xl font-bold transition-all ${
+                    page === i + 1
+                      ? "bg-primary-600 text-white shadow-lg shadow-primary-200"
+                      : "bg-white text-secondary-600 hover:bg-secondary-50 border border-secondary-100"
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPage((p) => Math.min(totalPages, p + 1));
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              disabled={page === totalPages}
+              className="px-6 py-2 rounded-xl font-bold border-secondary-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white"
+            >
+              Next
+            </Button>
           </div>
         )}
 

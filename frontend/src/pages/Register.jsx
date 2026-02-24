@@ -21,6 +21,7 @@ const Register = () => {
     password: "",
     college: "",
     role: "student",
+    adminPin: "",
   });
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -40,6 +41,11 @@ const Register = () => {
       return;
     }
 
+    if (formData.role === "collegeAdmin" && !formData.adminPin) {
+      toast.error("Please provide the Admin PIN");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await register(
@@ -49,6 +55,7 @@ const Register = () => {
         confirmPassword,
         formData.college,
         formData.role,
+        formData.adminPin,
       );
       if (res.success) {
         toast.success("Registration Successful");
@@ -139,12 +146,28 @@ const Register = () => {
                 name="role"
                 className="block w-full px-4 py-2 border border-secondary-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 bg-white"
                 onChange={handleChange}
-                defaultValue="student"
+                value={formData.role}
               >
                 <option value="student">Student</option>
                 <option value="collegeAdmin">College Admin</option>
               </select>
             </div>
+
+            {formData.role === "collegeAdmin" && (
+              <div className="relative">
+                <Input
+                  label="Admin Secret PIN (Admins Only)"
+                  id="adminPin"
+                  name="adminPin"
+                  type="password"
+                  placeholder="Enter 4-digit PIN if registering as Admin"
+                  onChange={handleChange}
+                  className="pl-10"
+                  required
+                />
+                <LockClosedIcon className="h-5 w-5 text-gray-400 absolute left-3 top-[34px] pointer-events-none" />
+              </div>
+            )}
 
             <div className="relative">
               <Input

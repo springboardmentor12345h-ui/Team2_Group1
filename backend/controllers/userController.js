@@ -35,10 +35,27 @@ const createSendToken = (user, statusCode, res) => {
 
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.find();
+    // 1) Filtering
+    const queryObj = { ...req.query };
+    const excludedFields = ['page', 'sort', 'limit', 'fields'];
+    excludedFields.forEach((el) => delete queryObj[el]);
+
+    // 2) Basic pagination
+    const page = req.query.page * 1 || 1;
+    const limit = req.query.limit * 1 || 100;
+    const skip = (page - 1) * limit;
+
+    const query = User.find(queryObj);
+
+    // Get total count for the filtered query
+    const totalResults = await User.countDocuments(queryObj);
+
+    const users = await query.skip(skip).limit(limit);
+
     res.status(200).json({
       status: 'success',
       results: users.length,
+      totalResults,
       data: {
         users,
       },
@@ -53,6 +70,13 @@ exports.getAllUsers = async (req, res) => {
 
 exports.signup = async (req, res) => {
   try {
+    // Check for admin pin if role is collegeAdmin
+    if (req.body.role === 'collegeAdmin') {
+      if (req.body.adminPin !== '1234') {
+        throw new Error('Invalid Admin PIN for College Admin registration!');
+      }
+    }
+
     const newUser = await User.create({
       name: req.body.name,
       email: req.body.email,
@@ -60,6 +84,7 @@ exports.signup = async (req, res) => {
       passwordConfirm: req.body.passwordConfirm,
       college: req.body.college,
       role: req.body.role,
+      adminPin: req.body.adminPin,
     });
 
     // Add Admin Log

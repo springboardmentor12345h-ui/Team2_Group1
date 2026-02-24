@@ -4,7 +4,7 @@ import {
   BellIcon,
   UserCircleIcon,
   ArrowRightOnRectangleIcon,
-  CalendarIcon,
+  RocketLaunchIcon,
 } from "@heroicons/react/24/outline";
 import AuthContext from "../context/AuthContext";
 import Button from "./ui/Button";
@@ -62,7 +62,7 @@ const Navbar = () => {
           <div className="flex items-center space-x-8">
             <Link to="/" className="flex items-center gap-2.5 group">
               <div className="w-9 h-9 bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl flex items-center justify-center text-white shadow-md group-hover:shadow-lg transition-all duration-300 transform group-hover:-rotate-3">
-                <CalendarIcon className="w-5 h-5" />
+                <RocketLaunchIcon className="w-5 h-5" />
               </div>
               <span className="text-lg font-bold text-secondary-900 tracking-tight">
                 CampusEventHub
@@ -70,6 +70,7 @@ const Navbar = () => {
             </Link>
 
             <div className="hidden md:flex items-center space-x-1">
+              <NavLink to="/">Home</NavLink>
               <NavLink to="/events">Events</NavLink>
               {user && <NavLink to="/dashboard">Dashboard</NavLink>}
               {user &&

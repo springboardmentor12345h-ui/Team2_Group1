@@ -40,7 +40,7 @@ const Dashboard = () => {
       // Only fetch logs if user is an admin
       if (user.role === "collegeAdmin" || user.role === "superAdmin") {
         try {
-          const logsRes = await axios.get("/api/v1/logs?limit=10");
+          const logsRes = await axios.get("/api/v1/logs?limit=3");
           setActivities(logsRes.data.data.logs);
         } catch (logError) {
           console.error("Logs fetch failed:", logError);
@@ -214,9 +214,16 @@ const Dashboard = () => {
                           >
                             {event.category}
                           </span>
-                          <div className="flex items-center gap-1.5 bg-success/10 text-success px-2 py-0.5 rounded-full text-[10px] font-black">
-                            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
-                            FREE
+                          <div className="flex gap-2">
+                            {new Date() > new Date(event.endDate) && (
+                              <div className="flex items-center gap-1.5 bg-red-50 text-red-600 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter border border-red-100">
+                                Completed
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1.5 bg-success/10 text-success px-2 py-0.5 rounded-full text-[10px] font-black">
+                              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
+                              FREE
+                            </div>
                           </div>
                         </div>
                         <h3 className="text-xl font-bold text-secondary-900 group-hover:text-primary-600 transition-colors">

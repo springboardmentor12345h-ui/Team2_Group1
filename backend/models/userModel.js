@@ -43,6 +43,10 @@ const userSchema = mongoose.Schema({
     enum: ['student', 'collegeAdmin', 'superAdmin'],
     default: 'student',
   },
+  adminPin: {
+    type: String,
+    select: false, // Don't return this in queries
+  },
 });
 
 userSchema.pre('save', async function () {

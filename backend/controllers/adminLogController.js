@@ -2,10 +2,24 @@ const AdminLog = require('../models/adminLogModel');
 
 exports.getAllLogs = async (req, res) => {
   try {
-    const logs = await AdminLog.find().populate('user', 'name role college');
+    // Basic pagination
+    const page = req.query.page * 1 || 1;
+    const limit = req.query.limit * 1 || 100;
+    const skip = (page - 1) * limit;
+
+    const query = AdminLog.find()
+      .sort('-timestamp')
+      .populate('user', 'name role college');
+
+    // Get total count
+    const totalResults = await AdminLog.countDocuments();
+
+    const logs = await query.skip(skip).limit(limit);
+
     res.status(200).json({
       status: 'success',
       results: logs.length,
+      totalResults,
       data: {
         logs,
       },

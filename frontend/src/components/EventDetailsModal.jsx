@@ -43,8 +43,14 @@ const EventDetailsModal = ({ isOpen, onClose, event }) => {
               >
                 {event.category}
               </span>
-              <span className="bg-success/90 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
-                Active
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                  new Date() > new Date(event.endDate)
+                    ? "bg-red-600 text-white"
+                    : "bg-success/90 text-white"
+                }`}
+              >
+                {new Date() > new Date(event.endDate) ? "Completed" : "Active"}
               </span>
             </div>
           </div>

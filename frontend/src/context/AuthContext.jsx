@@ -42,6 +42,7 @@ export const AuthProvider = ({ children }) => {
     passwordConfirm,
     college,
     role,
+    adminPin,
   ) => {
     try {
       const { data } = await axios.post(`${API_URL}/signup`, {
@@ -51,6 +52,7 @@ export const AuthProvider = ({ children }) => {
         passwordConfirm,
         college,
         role,
+        adminPin,
       });
       const userData = data.data.user;
       localStorage.setItem("userInfo", JSON.stringify(userData));
