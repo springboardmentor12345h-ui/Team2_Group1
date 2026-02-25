@@ -183,12 +183,10 @@ const Events = () => {
             {events.map((event) => (
               <Card
                 key={event._id}
-                className="overflow-hidden group h-full flex flex-col hover:shadow-2xl transition-all duration-300 border-secondary-100 hover:border-primary-200"
+                onClick={() => handleViewDetails(event)}
+                className="overflow-hidden group h-full flex flex-col hover:shadow-2xl transition-all duration-300 border-secondary-100 hover:border-primary-200 cursor-pointer"
               >
-                <div
-                  className="h-48 overflow-hidden relative"
-                  onClick={() => handleViewDetails(event)}
-                >
+                <div className="h-48 overflow-hidden relative">
                   <img
                     src={event.image || getCategoryImage(event.category)}
                     alt={event.title}

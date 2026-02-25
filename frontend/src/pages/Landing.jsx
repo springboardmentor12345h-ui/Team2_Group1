@@ -1,6 +1,6 @@
 import React, { useContext, useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
   MusicalNoteIcon,
@@ -68,6 +68,7 @@ const ParticleBackground = () => {
 
 const Landing = () => {
   const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
   const [trendingEvents, setTrendingEvents] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
 
@@ -340,7 +341,8 @@ const Landing = () => {
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true }}
                     transition={{ delay: i * 0.1 }}
-                    className="glass-card flex flex-col sm:flex-row items-center justify-between p-8 gap-8 border-slate-100 bg-white/40"
+                    className="glass-card flex flex-col sm:flex-row items-center justify-between p-8 gap-8 border-slate-100 bg-white/40 cursor-pointer"
+                    onClick={() => navigate("/events")}
                   >
                     <div className="flex gap-8 items-center w-full">
                       <div className="w-20 h-20 bg-purple-50 rounded-2xl flex flex-col items-center justify-center border border-purple-100 shrink-0">
