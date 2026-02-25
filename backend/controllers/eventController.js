@@ -64,7 +64,11 @@ exports.getAllEvents = async (req, res) => {
       const sortBy = req.query.sort.split(',').join(' ');
       query = query.sort(sortBy);
     } else {
-      query = query.sort('-startDate');
+      // Default: Upcoming first (nearest first), then past
+      // We'll use a trick or just sort by startDate but we really need a way to push past events down.
+      // Since MongoDB .sort() is limited on computed fields, we'll keep startDate but the frontend
+      // can pass endDate[gte] to filter.
+      query = query.sort('startDate');
     }
 
     // 4) Pagination & Limit
@@ -108,7 +112,7 @@ exports.createEvent = async (req, res) => {
 
     // Add Admin Log
     await AdminLog.create({
-      action: `Created new event: ${newEvent.title}`,
+      action: `Created new event: ${newEvent.title} by ${req.user.name}`,
       user: req.user.id,
     });
 
@@ -160,7 +164,7 @@ exports.updateEvent = async (req, res) => {
     // Add Admin Log
     if (event) {
       await AdminLog.create({
-        action: `Updated event: ${event.title}`,
+        action: `Updated event: ${event.title} by ${req.user.name}`,
         user: req.user.id,
       });
     }
@@ -187,7 +191,7 @@ exports.deleteEvent = async (req, res) => {
     // Add Admin Log
     if (event) {
       await AdminLog.create({
-        action: `Deleted event: ${event.title}`,
+        action: `Deleted event: ${event.title} by ${req.user.name}`,
         user: req.user.id,
       });
     }

@@ -51,7 +51,9 @@ const AdminPanel = () => {
       const [usersRes, eventsRes, logsRes, recentLogsRes, studentsRes] =
         await Promise.all([
           axios.get(`/api/v1/users?page=${usersPage}&limit=10`),
-          axios.get(`/api/v1/events?page=${eventsPage}&limit=10`),
+          axios.get(
+            `/api/v1/events?page=${eventsPage}&limit=10&sort=-createdAt`,
+          ),
           axios.get(`/api/v1/logs?page=${logsPage}&limit=10`),
           axios.get(`/api/v1/logs?limit=5`),
           axios.get(`/api/v1/users?role=student&limit=1`), // Fetch to get totalResults for students
@@ -96,7 +98,7 @@ const AdminPanel = () => {
             setUsersTotal(Math.ceil(res.data.totalResults / 10));
           } else if (activeTab === "Event Management") {
             const res = await axios.get(
-              `/api/v1/events?page=${eventsPage}&limit=10`,
+              `/api/v1/events?page=${eventsPage}&limit=10&sort=-createdAt`,
             );
             setEventsData(res.data.data.events);
             setEventsTotal(Math.ceil(res.data.totalResults / 10));
@@ -349,7 +351,7 @@ const AdminPanel = () => {
                       College Hub
                     </th>
                     <th className="px-8 py-6 border-b border-secondary-100">
-                      Network Presence
+                      Status
                     </th>
                   </tr>
                 </thead>
@@ -387,7 +389,7 @@ const AdminPanel = () => {
                       <td className="px-8 py-6">
                         <span className="inline-flex items-center gap-2 text-success font-black text-[10px] uppercase tracking-widest">
                           <span className="w-2 h-2 rounded-full bg-success animate-pulse shadow-sm shadow-success"></span>
-                          Validated
+                          Active
                         </span>
                       </td>
                     </tr>
