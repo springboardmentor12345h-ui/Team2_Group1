@@ -207,7 +207,8 @@ const AdminPanel = () => {
                   {eventsData.slice(0, 4).map((event) => (
                     <div
                       key={event._id}
-                      className="flex items-center gap-4 group"
+                      className="flex items-center gap-4 group cursor-pointer"
+                      onClick={() => setActiveTab("Event Management")}
                     >
                       <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-md flex-shrink-0 group-hover:scale-105 transition-transform duration-300">
                         <img
