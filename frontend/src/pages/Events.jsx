@@ -38,12 +38,28 @@ const Events = () => {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      let url = `/api/v1/events?page=${page}&limit=6&`;
+      let url = `/api/v1/events?page=${page}&limit=6&sort=startDate&`;
       if (query) url += `search=${query}&`;
       if (category !== "All Types") url += `category=${category}&`;
 
       const { data } = await axios.get(url);
-      setEvents(data.data.events);
+
+      // Sort in frontend: Upcoming first (ASC), then Completed (DESC)
+      const sortedEvents = [...data.data.events].sort((a, b) => {
+        const aUpcoming = new Date(a.endDate) > new Date();
+        const bUpcoming = new Date(b.endDate) > new Date();
+
+        if (aUpcoming && !bUpcoming) return -1;
+        if (!aUpcoming && bUpcoming) return 1;
+
+        if (aUpcoming) {
+          return new Date(a.startDate) - new Date(b.startDate);
+        } else {
+          return new Date(b.startDate) - new Date(a.startDate);
+        }
+      });
+
+      setEvents(sortedEvents);
       setTotalPages(Math.ceil(data.totalResults / 6));
     } catch (error) {
       toast.error("Failed to load events");

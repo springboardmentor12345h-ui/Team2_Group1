@@ -34,13 +34,29 @@ const Dashboard = () => {
     setLoading(true);
     try {
       // Fetch events (accessible to all)
-      const eventsRes = await axios.get("/api/v1/events?sort=-startDate");
-      setUpcomingEvents(eventsRes.data.data.events);
+      const eventsRes = await axios.get("/api/v1/events?sort=startDate");
+
+      // Sort in frontend: Upcoming first (ASC), then Completed (DESC)
+      const sortedEvents = [...eventsRes.data.data.events].sort((a, b) => {
+        const aUpcoming = new Date(a.endDate) > new Date();
+        const bUpcoming = new Date(b.endDate) > new Date();
+
+        if (aUpcoming && !bUpcoming) return -1;
+        if (!aUpcoming && bUpcoming) return 1;
+
+        if (aUpcoming) {
+          return new Date(a.startDate) - new Date(b.startDate);
+        } else {
+          return new Date(b.startDate) - new Date(a.startDate);
+        }
+      });
+
+      setUpcomingEvents(sortedEvents);
 
       // Only fetch logs if user is an admin
       if (user.role === "collegeAdmin" || user.role === "superAdmin") {
         try {
-          const logsRes = await axios.get("/api/v1/logs?limit=3");
+          const logsRes = await axios.get(`/api/v1/logs?limit=3`);
           setActivities(logsRes.data.data.logs);
         } catch (logError) {
           console.error("Logs fetch failed:", logError);

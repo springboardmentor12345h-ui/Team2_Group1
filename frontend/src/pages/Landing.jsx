@@ -100,7 +100,7 @@ const Landing = () => {
     const fetchTrendingEvents = async () => {
       try {
         const { data } = await axios.get(
-          "/api/v1/events?sort=-startDate&limit=3",
+          "/api/v1/events?sort=-createdAt&limit=3",
         );
         if (data.status === "success") {
           setTrendingEvents(data.data.events);
