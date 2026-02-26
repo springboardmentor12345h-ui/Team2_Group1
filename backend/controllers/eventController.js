@@ -35,66 +35,53 @@ exports.uploadEventImage = upload.single('image');
 
 exports.getAllEvents = async (req, res) => {
   try {
-    // 1) Filtering
-    const queryObj = { ...req.query };
-    const excludedFields = ['page', 'sort', 'limit', 'fields', 'search'];
+    let queryObj = { ...req.query };
+
+    const excludedFields = ["page", "sort", "limit", "fields", "search"];
     excludedFields.forEach((el) => delete queryObj[el]);
 
+    // 🔥 Convert query operators
     let queryStr = JSON.stringify(queryObj);
-    queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, (match) => `$${match}`);
-
-    let query = Event.find(JSON.parse(queryStr)).populate(
-      'collegeId',
-      'name college',
+    queryStr = queryStr.replace(
+      /\b(gte|gt|lte|lt)\b/g,
+      (match) => `$${match}`
     );
 
-    // 2) Search
+    let filter = JSON.parse(queryStr);
+
+    // 🔎 Search filter
     if (req.query.search) {
-      query = query.find({
-        $or: [
-          { title: { $regex: req.query.search, $options: 'i' } },
-          { description: { $regex: req.query.search, $options: 'i' } },
-          { category: { $regex: req.query.search, $options: 'i' } },
-        ],
-      });
+      filter.$or = [
+        { title: { $regex: req.query.search, $options: "i" } },
+        { description: { $regex: req.query.search, $options: "i" } },
+        { category: { $regex: req.query.search, $options: "i" } },
+      ];
     }
 
-    // 3) Sorting
-    if (req.query.sort) {
-      const sortBy = req.query.sort.split(',').join(' ');
-      query = query.sort(sortBy);
-    } else {
-      // Default: Upcoming first (nearest first), then past
-      // We'll use a trick or just sort by startDate but we really need a way to push past events down.
-      // Since MongoDB .sort() is limited on computed fields, we'll keep startDate but the frontend
-      // can pass endDate[gte] to filter.
-      query = query.sort('startDate');
-    }
+    let query = Event.find(filter);
 
-    // 4) Pagination & Limit
+    // Pagination
     const page = req.query.page * 1 || 1;
-    const limit = req.query.limit * 1 || 100;
+    const limit = req.query.limit * 1 || 6;
     const skip = (page - 1) * limit;
-
-    // Get total count for pagination (with current filters/search)
-    const totalResults = await Event.countDocuments(query.getFilter());
 
     query = query.skip(skip).limit(limit);
 
     const events = await query;
+    const totalResults = await Event.countDocuments(filter);
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       results: events.length,
       totalResults,
       data: {
         events,
       },
     });
-  } catch (error) {
-    res.status(404).json({
-      status: 'fail',
-      message: error.message,
+  } catch (err) {
+    res.status(400).json({
+      status: "fail",
+      message: err.message,
     });
   }
 };
