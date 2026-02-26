@@ -23,12 +23,14 @@ const Events = () => {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All Types");
+  const [selectedDate, setSelectedDate] = useState(""); // ✅ Date filter added
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
+  // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [query, category]);
+  }, [query, category, selectedDate]);
 
   // Modal States
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -39,12 +41,20 @@ const Events = () => {
     setLoading(true);
     try {
       let url = `/api/v1/events?page=${page}&limit=6&sort=startDate&`;
+
       if (query) url += `search=${query}&`;
       if (category !== "All Types") url += `category=${category}&`;
 
+      // ✅ Date Filter (No timezone shift issue)
+      if (selectedDate) {
+        const startOfDay = `${selectedDate}T00:00:00`;
+        const endOfDay = `${selectedDate}T23:59:59`;
+        url += `startDate[gte]=${startOfDay}&`;
+        url += `startDate[lte]=${endOfDay}&`;
+      }
+
       const { data } = await axios.get(url);
 
-      // Sort in frontend: Upcoming first (ASC), then Completed (DESC)
       const sortedEvents = [...data.data.events].sort((a, b) => {
         const aUpcoming = new Date(a.endDate) > new Date();
         const bUpcoming = new Date(b.endDate) > new Date();
@@ -68,12 +78,14 @@ const Events = () => {
     }
   };
 
+  // Debounced fetch
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       fetchEvents();
     }, 500);
+
     return () => clearTimeout(timeoutId);
-  }, [query, category, page]);
+  }, [query, category, selectedDate, page]);
 
   const handleViewDetails = (event) => {
     setSelectedEvent(event);
@@ -110,6 +122,7 @@ const Events = () => {
   return (
     <div className="min-h-screen bg-secondary-50 pb-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-bold text-secondary-900">
@@ -139,16 +152,17 @@ const Events = () => {
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search events by title, description or category..."
+                placeholder="Search events..."
                 className="pl-10 h-12"
               />
               <MagnifyingGlassIcon className="w-5 h-5 text-secondary-400 absolute left-3 top-3.5" />
             </div>
+
             <div className="relative min-w-[200px]">
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full h-12 pl-10 pr-4 bg-white border border-secondary-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-secondary-700 appearance-none shadow-sm"
+                className="w-full h-12 pl-10 pr-4 bg-white border border-secondary-300 rounded-xl"
               >
                 <option>All Types</option>
                 <option>Hackathon</option>
@@ -157,6 +171,16 @@ const Events = () => {
                 <option>Workshop</option>
               </select>
               <FunnelIcon className="w-5 h-5 text-secondary-400 absolute left-3 top-3.5 pointer-events-none" />
+            </div>
+
+            {/* Date Filter */}
+            <div className="relative min-w-[200px]">
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="w-full h-12 px-4 bg-white border border-secondary-300 rounded-xl"
+              />
             </div>
           </div>
         </Card>
