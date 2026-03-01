@@ -85,6 +85,7 @@ exports.signup = async (req, res) => {
       college: req.body.college,
       role: req.body.role,
       adminPin: req.body.adminPin,
+      status: req.body.role === 'collegeAdmin' ? 'pending' : 'approved',
     });
 
     // Add Admin Log
@@ -92,6 +93,18 @@ exports.signup = async (req, res) => {
       action: `New user registered: ${newUser.name} as ${newUser.role}`,
       user: newUser._id,
     });
+
+    // Handle based on status
+    if (newUser.status === 'pending') {
+      return res.status(201).json({
+        status: 'success',
+        message:
+          'Registration successful! Please wait for the Super Admin to approve your account before you can log in.',
+        data: {
+          user: newUser,
+        },
+      });
+    }
 
     createSendToken(newUser, 201, res);
   } catch (error) {
@@ -113,6 +126,17 @@ exports.login = async (req, res) => {
     if (!user || !(await user.correctPassword(password, user.password))) {
       throw new Error('Incorrect email or password!');
     }
+
+    if (user.status === 'pending') {
+      throw new Error(
+        'Your registration is pending approval from the Super Admin.',
+      );
+    }
+
+    if (user.status === 'rejected') {
+      throw new Error('Your registration has been rejected.');
+    }
+
     createSendToken(user, 200, res);
   } catch (error) {
     res.status(400).json({
@@ -167,4 +191,69 @@ exports.restrictTo = (...roles) => {
     }
     next();
   };
+};
+
+exports.deleteUser = async (req, res) => {
+  try {
+    if (req.params.id === req.user.id) {
+      throw new Error('You cannot delete yourself!');
+    }
+    const user = await User.findByIdAndDelete(req.params.id);
+
+    if (!user) {
+      throw new Error('No user found with that ID');
+    }
+
+    // Add Admin Log
+    await AdminLog.create({
+      action: `Deleted user: ${user.name} (${user.email}) by Super Admin`,
+      user: req.user.id,
+    });
+
+    res.status(204).json({
+      status: 'success',
+      data: null,
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'error',
+      message: error.message,
+    });
+  }
+};
+exports.updateUserStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['approved', 'rejected'].includes(status)) {
+      throw new Error('Invalid status provide. Use approved or rejected.');
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true, runValidators: true },
+    );
+
+    if (!user) {
+      throw new Error('No user found with that ID');
+    }
+
+    // Add Admin Log
+    await AdminLog.create({
+      action: `User ${user.name} (${user.email}) ${status} by Super Admin`,
+      user: req.user.id,
+    });
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        user,
+      },
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'error',
+      message: error.message,
+    });
+  }
 };
