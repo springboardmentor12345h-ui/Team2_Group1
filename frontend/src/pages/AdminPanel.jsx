@@ -9,6 +9,9 @@ import {
   EnvelopeIcon,
   ClockIcon,
   PencilSquareIcon,
+  TrashIcon,
+  CheckIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import EditEventModal from "../components/EditEventModal";
 import axios from "axios";
@@ -21,7 +24,7 @@ import Button from "../components/ui/Button";
 import { toast } from "react-toastify";
 
 const AdminPanel = () => {
-  const { user } = useContext(AuthContext);
+  const { user, loading: authLoading } = useContext(AuthContext);
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("Overview");
   const [usersData, setUsersData] = useState([]);
@@ -36,6 +39,7 @@ const AdminPanel = () => {
   // Global Stat states
   const [totalStudents, setTotalStudents] = useState(0);
   const [totalEventsCount, setTotalEventsCount] = useState(0);
+  const [pendingUsersCount, setPendingUsersCount] = useState(0);
 
   // Pagination states
   const [usersPage, setUsersPage] = useState(1);
@@ -46,18 +50,24 @@ const AdminPanel = () => {
   const [logsTotal, setLogsTotal] = useState(1);
 
   const fetchAdminData = async () => {
+    if (!user) return;
     setLoading(true);
     try {
-      const [usersRes, eventsRes, logsRes, recentLogsRes, studentsRes] =
-        await Promise.all([
-          axios.get(`/api/v1/users?page=${usersPage}&limit=10`),
-          axios.get(
-            `/api/v1/events?page=${eventsPage}&limit=10&sort=-createdAt`,
-          ),
-          axios.get(`/api/v1/logs?page=${logsPage}&limit=10`),
-          axios.get(`/api/v1/logs?limit=5`),
-          axios.get(`/api/v1/users?role=student&limit=1`), // Fetch to get totalResults for students
-        ]);
+      const [
+        usersRes,
+        eventsRes,
+        logsRes,
+        recentLogsRes,
+        studentsRes,
+        pendingRes,
+      ] = await Promise.all([
+        axios.get(`/api/v1/users?page=${usersPage}&limit=10`),
+        axios.get(`/api/v1/events?page=${eventsPage}&limit=10&sort=-createdAt`),
+        axios.get(`/api/v1/logs?page=${logsPage}&limit=10`),
+        axios.get(`/api/v1/logs?limit=5`),
+        axios.get(`/api/v1/users?role=student&limit=1`),
+        axios.get(`/api/v1/users?status=pending&limit=1`),
+      ]);
       setUsersData(usersRes.data.data.users);
       setUsersTotal(Math.ceil(usersRes.data.totalResults / 10));
 
@@ -70,6 +80,9 @@ const AdminPanel = () => {
 
       setRecentLogs(recentLogsRes.data.data.logs);
       setTotalStudents(studentsRes.data.totalResults);
+      if (user.role === "superAdmin") {
+        setPendingUsersCount(pendingRes.data.totalResults);
+      }
     } catch (error) {
       toast.error("Failed to load admin data");
     } finally {
@@ -77,7 +90,41 @@ const AdminPanel = () => {
     }
   };
 
+  const handleUpdateUserStatus = async (userId, newStatus) => {
+    try {
+      await axios.patch(`/api/v1/users/${userId}`, { status: newStatus });
+      toast.success(`User ${newStatus} successfully`);
+      fetchAdminData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update status");
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm("Are you sure you want to delete this user?")) return;
+    try {
+      await axios.delete(`/api/v1/users/${userId}`);
+      toast.success("User deleted successfully");
+      fetchAdminData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete user");
+    }
+  };
+
+  const handleDeleteEvent = async (eventId) => {
+    if (!window.confirm("Are you sure you want to delete this event?")) return;
+    try {
+      await axios.delete(`/api/v1/events/${eventId}`);
+      toast.success("Event deleted successfully");
+      fetchAdminData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete event");
+    }
+  };
+
   useEffect(() => {
+    if (authLoading) return;
+
     if (!user || (user.role !== "collegeAdmin" && user.role !== "superAdmin")) {
       navigate("/dashboard");
       return;
@@ -89,6 +136,7 @@ const AdminPanel = () => {
 
       // Auto-refresh the current tab's data
       const refreshCurrentTab = async () => {
+        if (!user) return;
         try {
           if (activeTab === "User Management") {
             const res = await axios.get(
@@ -111,12 +159,16 @@ const AdminPanel = () => {
             setLogsTotal(Math.ceil(res.data.totalResults / 10));
           }
           // Always refresh recent logs and global states
-          const [rLogRes, sRes] = await Promise.all([
+          const [rLogRes, sRes, pRes] = await Promise.all([
             axios.get(`/api/v1/logs?limit=5`),
             axios.get(`/api/v1/users?role=student&limit=1`),
+            axios.get(`/api/v1/users?status=pending&limit=1`),
           ]);
           setRecentLogs(rLogRes.data.data.logs);
           setTotalStudents(sRes.data.totalResults);
+          if (user.role === "superAdmin") {
+            setPendingUsersCount(pRes.data.totalResults);
+          }
         } catch (e) {
           console.error("Selective Refresh failed", e);
         }
@@ -286,53 +338,55 @@ const AdminPanel = () => {
             </div>
 
             {/* System Health Section */}
-            <Card className="p-8 border-secondary-100 rounded-[2.5rem] bg-white shadow-xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 -mr-12 -mt-12 w-32 h-32 bg-primary-50 rounded-full blur-3xl opacity-50" />
-              <div className="flex items-center justify-between mb-8">
-                <h4 className="font-display font-black text-secondary-900 text-xl tracking-tight">
-                  System Health & Metrics
-                </h4>
-                <div className="flex gap-2">
-                  <span className="px-3 py-1 rounded-full bg-success/10 text-success text-[10px] font-black uppercase">
-                    Live
-                  </span>
+            {user.role === "superAdmin" && (
+              <Card className="p-8 border-secondary-100 rounded-[2.5rem] bg-white shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 -mr-12 -mt-12 w-32 h-32 bg-primary-50 rounded-full blur-3xl opacity-50" />
+                <div className="flex items-center justify-between mb-8">
+                  <h4 className="font-display font-black text-secondary-900 text-xl tracking-tight">
+                    System Health & Metrics
+                  </h4>
+                  <div className="flex gap-2">
+                    <span className="px-3 py-1 rounded-full bg-success/10 text-success text-[10px] font-black uppercase">
+                      Live
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-5 rounded-2xl bg-secondary-50 hover:bg-white hover:shadow-lg transition-all border border-transparent hover:border-secondary-100">
-                  <span className="text-secondary-400 font-black text-[10px] uppercase tracking-[0.1em] block mb-2">
-                    Server Status
-                  </span>
-                  <span className="font-black text-success text-sm uppercase">
-                    Active / Healthy
-                  </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="p-5 rounded-2xl bg-secondary-50 hover:bg-white hover:shadow-lg transition-all border border-transparent hover:border-secondary-100">
+                    <span className="text-secondary-400 font-black text-[10px] uppercase tracking-[0.1em] block mb-2">
+                      Server Status
+                    </span>
+                    <span className="font-black text-success text-sm uppercase">
+                      Active / Healthy
+                    </span>
+                  </div>
+                  <div className="p-5 rounded-2xl bg-secondary-50 hover:bg-white hover:shadow-lg transition-all border border-transparent hover:border-secondary-100">
+                    <span className="text-secondary-400 font-black text-[10px] uppercase tracking-[0.1em] block mb-2">
+                      Latency
+                    </span>
+                    <span className="font-black text-primary-600 text-sm tracking-widest">
+                      {apiLatency}ms
+                    </span>
+                  </div>
+                  <div className="p-5 rounded-2xl bg-secondary-50 hover:bg-white hover:shadow-lg transition-all border border-transparent hover:border-secondary-100">
+                    <span className="text-secondary-400 font-black text-[10px] uppercase tracking-[0.1em] block mb-2">
+                      Database
+                    </span>
+                    <span className="font-black text-secondary-900 text-sm uppercase">
+                      Sync Ready
+                    </span>
+                  </div>
+                  <div className="p-5 rounded-2xl bg-secondary-50 hover:bg-white hover:shadow-lg transition-all border border-transparent hover:border-secondary-100">
+                    <span className="text-secondary-400 font-black text-[10px] uppercase tracking-[0.1em] block mb-2">
+                      Secure Layer
+                    </span>
+                    <span className="font-black text-secondary-900 text-sm uppercase">
+                      SSL Active
+                    </span>
+                  </div>
                 </div>
-                <div className="p-5 rounded-2xl bg-secondary-50 hover:bg-white hover:shadow-lg transition-all border border-transparent hover:border-secondary-100">
-                  <span className="text-secondary-400 font-black text-[10px] uppercase tracking-[0.1em] block mb-2">
-                    Latency
-                  </span>
-                  <span className="font-black text-primary-600 text-sm tracking-widest">
-                    {apiLatency}ms
-                  </span>
-                </div>
-                <div className="p-5 rounded-2xl bg-secondary-50 hover:bg-white hover:shadow-lg transition-all border border-transparent hover:border-secondary-100">
-                  <span className="text-secondary-400 font-black text-[10px] uppercase tracking-[0.1em] block mb-2">
-                    Database
-                  </span>
-                  <span className="font-black text-secondary-900 text-sm uppercase">
-                    Sync Ready
-                  </span>
-                </div>
-                <div className="p-5 rounded-2xl bg-secondary-50 hover:bg-white hover:shadow-lg transition-all border border-transparent hover:border-secondary-100">
-                  <span className="text-secondary-400 font-black text-[10px] uppercase tracking-[0.1em] block mb-2">
-                    Secure Layer
-                  </span>
-                  <span className="font-black text-secondary-900 text-sm uppercase">
-                    SSL Active
-                  </span>
-                </div>
-              </div>
-            </Card>
+              </Card>
+            )}
           </div>
         );
       case "User Management":
@@ -353,6 +407,9 @@ const AdminPanel = () => {
                     </th>
                     <th className="px-8 py-6 border-b border-secondary-100">
                       Status
+                    </th>
+                    <th className="px-8 py-6 border-b border-secondary-100">
+                      Actions
                     </th>
                   </tr>
                 </thead>
@@ -379,7 +436,13 @@ const AdminPanel = () => {
                       </td>
                       <td className="px-8 py-6">
                         <span
-                          className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${u.role === "student" ? "bg-blue-50 text-blue-600 border border-blue-100" : "bg-purple-50 text-purple-600 border border-purple-100"}`}
+                          className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${
+                            u.role === "student"
+                              ? "bg-blue-50 text-blue-600 border border-blue-100"
+                              : u.role === "superAdmin"
+                                ? "bg-red-50 text-red-600 border border-red-200 shadow-sm"
+                                : "bg-purple-50 text-purple-600 border border-purple-100"
+                          }`}
                         >
                           {u.role}
                         </span>
@@ -388,10 +451,69 @@ const AdminPanel = () => {
                         {u.college || "Global Registry"}
                       </td>
                       <td className="px-8 py-6">
-                        <span className="inline-flex items-center gap-2 text-success font-black text-[10px] uppercase tracking-widest">
-                          <span className="w-2 h-2 rounded-full bg-success animate-pulse shadow-sm shadow-success"></span>
-                          Active
+                        <span
+                          className={`inline-flex items-center gap-2 font-black text-[10px] uppercase tracking-widest ${
+                            u.status === "approved"
+                              ? "text-success"
+                              : u.status === "pending"
+                                ? "text-orange-500"
+                                : "text-red-500"
+                          }`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              u.status === "approved"
+                                ? "bg-success animate-pulse shadow-sm shadow-success"
+                                : u.status === "pending"
+                                  ? "bg-orange-500 animate-bounce"
+                                  : "bg-red-500"
+                            }`}
+                          ></span>
+                          {u.status}
                         </span>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex items-center gap-2">
+                          {user.role === "superAdmin" &&
+                            u.status === "pending" && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleUpdateUserStatus(u._id, "approved")
+                                  }
+                                  className="p-2 text-success hover:bg-success/10 rounded-xl"
+                                  title="Approve"
+                                >
+                                  <CheckIcon className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleUpdateUserStatus(u._id, "rejected")
+                                  }
+                                  className="p-2 text-red-500 hover:bg-red-50 rounded-xl"
+                                  title="Reject"
+                                >
+                                  <XMarkIcon className="w-4 h-4" />
+                                </Button>
+                              </>
+                            )}
+                          {user.role === "superAdmin" &&
+                            u.email !== "admin@example.com" && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteUser(u._id)}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-xl"
+                                title="Delete"
+                              >
+                                <TrashIcon className="w-4 h-4" />
+                              </Button>
+                            )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -502,17 +624,30 @@ const AdminPanel = () => {
                               ? "Completed"
                               : "Active"}
                           </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setEditingEvent(e);
-                              setIsEditModalOpen(true);
-                            }}
-                            className="p-2 border border-secondary-100 rounded-xl hover:bg-primary-50 text-primary-600 transition-all"
-                          >
-                            <PencilSquareIcon className="w-4 h-4" />
-                          </Button>
+                          {(user.role === "superAdmin" ||
+                            e.collegeId?._id === user._id) && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingEvent(e);
+                                  setIsEditModalOpen(true);
+                                }}
+                                className="p-2 border border-secondary-100 rounded-xl hover:bg-primary-50 text-primary-600 transition-all"
+                              >
+                                <PencilSquareIcon className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteEvent(e._id)}
+                                className="p-2 border border-secondary-100 rounded-xl hover:bg-red-50 text-red-600 transition-all ml-2"
+                              >
+                                <TrashIcon className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -591,7 +726,13 @@ const AdminPanel = () => {
                             <span className="text-xs font-black text-secondary-900 uppercase tracking-tight block">
                               {log.user?.name || "Hub System"}
                             </span>
-                            <span className="text-[9px] font-black text-primary-500 uppercase tracking-widest">
+                            <span
+                              className={`text-[9px] font-black uppercase tracking-widest ${
+                                log.user?.role === "superAdmin"
+                                  ? "text-red-500"
+                                  : "text-primary-500"
+                              }`}
+                            >
                               {log.user?.role || "Core"}
                             </span>
                           </div>
@@ -682,27 +823,34 @@ const AdminPanel = () => {
         <Card className="rounded-[3rem] border-secondary-100 shadow-2xl overflow-hidden bg-white">
           <div className="border-b border-secondary-100 bg-secondary-50/30">
             <nav className="flex space-x-12 px-10" aria-label="Tabs">
-              {[
-                "Overview",
-                "User Management",
-                "Event Management",
-                "Admin Logs",
-              ].map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`
-                    whitespace-nowrap py-6 px-1 border-b-4 font-black text-xs uppercase tracking-[0.15em] transition-all
+              {["Overview", "User Management", "Event Management", "Admin Logs"]
+                .filter((tab) => {
+                  if (tab === "User Management")
+                    return user.role === "superAdmin";
+                  return true;
+                })
+                .map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`
+                    whitespace-nowrap py-6 px-1 border-b-4 font-black text-xs uppercase tracking-[0.15em] transition-all relative
                     ${
                       activeTab === tab
                         ? "border-primary-600 text-primary-700"
                         : "border-transparent text-secondary-400 hover:text-secondary-600 hover:border-secondary-200"
                     }
                   `}
-                >
-                  {tab}
-                </button>
-              ))}
+                  >
+                    {tab}
+                    {tab === "User Management" && pendingUsersCount > 0 && (
+                      <span className="absolute top-4 -right-1 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                      </span>
+                    )}
+                  </button>
+                ))}
             </nav>
           </div>
 

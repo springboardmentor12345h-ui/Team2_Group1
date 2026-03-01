@@ -25,10 +25,12 @@ const Events = () => {
   const [category, setCategory] = useState("All Types");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [status, setStatus] = useState("All");
+  const [date, setDate] = useState("");
 
   useEffect(() => {
     setPage(1);
-  }, [query, category]);
+  }, [query, category, status, date]);
 
   // Modal States
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -38,28 +40,27 @@ const Events = () => {
   const fetchEvents = async () => {
     setLoading(true);
     try {
-      let url = `/api/v1/events?page=${page}&limit=6&sort=startDate&`;
+      let url = `/api/v1/events?page=${page}&limit=6&`;
       if (query) url += `search=${query}&`;
       if (category !== "All Types") url += `category=${category}&`;
+      if (status === "Upcoming")
+        url += `endDate[gte]=${new Date().toISOString()}&`;
+      if (status === "Completed")
+        url += `endDate[lt]=${new Date().toISOString()}&`;
+      if (date) {
+        const selectedDate = new Date(date);
+        const startOfDay = new Date(
+          selectedDate.setHours(0, 0, 0, 0),
+        ).toISOString();
+        const endOfDay = new Date(
+          selectedDate.setHours(23, 59, 59, 999),
+        ).toISOString();
+        url += `startDate[gte]=${startOfDay}&startDate[lte]=${endOfDay}&`;
+      }
 
       const { data } = await axios.get(url);
 
-      // Sort in frontend: Upcoming first (ASC), then Completed (DESC)
-      const sortedEvents = [...data.data.events].sort((a, b) => {
-        const aUpcoming = new Date(a.endDate) > new Date();
-        const bUpcoming = new Date(b.endDate) > new Date();
-
-        if (aUpcoming && !bUpcoming) return -1;
-        if (!aUpcoming && bUpcoming) return 1;
-
-        if (aUpcoming) {
-          return new Date(a.startDate) - new Date(b.startDate);
-        } else {
-          return new Date(b.startDate) - new Date(a.startDate);
-        }
-      });
-
-      setEvents(sortedEvents);
+      setEvents(data.data.events);
       setTotalPages(Math.ceil(data.totalResults / 6));
     } catch (error) {
       toast.error("Failed to load events");
@@ -73,7 +74,7 @@ const Events = () => {
       fetchEvents();
     }, 500);
     return () => clearTimeout(timeoutId);
-  }, [query, category, page]);
+  }, [query, category, page, status, date]);
 
   const handleViewDetails = (event) => {
     setSelectedEvent(event);
@@ -144,11 +145,32 @@ const Events = () => {
               />
               <MagnifyingGlassIcon className="w-5 h-5 text-secondary-400 absolute left-3 top-3.5" />
             </div>
-            <div className="relative min-w-[200px]">
+            <div className="relative min-w-[150px]">
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full h-12 pl-10 pr-4 bg-white border border-secondary-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-secondary-700 appearance-none shadow-sm cursor-pointer"
+              >
+                <option>All</option>
+                <option>Upcoming</option>
+                <option>Completed</option>
+              </select>
+              <ClockIcon className="w-5 h-5 text-secondary-400 absolute left-3 top-3.5 pointer-events-none" />
+            </div>
+            <div className="relative min-w-[180px]">
+              <Input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="pl-10 h-12 cursor-pointer"
+              />
+              <CalendarIcon className="w-5 h-5 text-secondary-400 absolute left-3 top-3.5 pointer-events-none" />
+            </div>
+            <div className="relative min-w-[180px]">
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full h-12 pl-10 pr-4 bg-white border border-secondary-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-secondary-700 appearance-none shadow-sm"
+                className="w-full h-12 pl-10 pr-4 bg-white border border-secondary-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-secondary-700 appearance-none shadow-sm cursor-pointer"
               >
                 <option>All Types</option>
                 <option>Hackathon</option>
@@ -328,6 +350,8 @@ const Events = () => {
               onClick={() => {
                 setQuery("");
                 setCategory("All Types");
+                setStatus("All");
+                setDate("");
               }}
             >
               Clear all filters
