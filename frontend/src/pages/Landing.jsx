@@ -101,7 +101,7 @@ const Landing = () => {
     const fetchTrendingEvents = async () => {
       try {
         const { data } = await axios.get(
-          "/api/v1/events?sort=-createdAt&limit=3",
+          `/api/v1/events?endDate[gte]=${new Date().toISOString()}&sort=startDate&limit=3`,
         );
         if (data.status === "success") {
           setTrendingEvents(data.data.events);
@@ -314,7 +314,7 @@ const Landing = () => {
                   NOW
                 </h2>
                 <p className="text-slate-400 font-bold tracking-widest mt-2 uppercase text-xs">
-                  Recently added elite events from top colleges
+                  Upcoming elite events from top colleges
                 </p>
               </div>
               <Link

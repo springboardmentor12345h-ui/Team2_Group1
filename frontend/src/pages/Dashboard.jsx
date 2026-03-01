@@ -86,6 +86,34 @@ const Dashboard = () => {
   useEffect(() => {
     if (user) {
       fetchDashboardData();
+
+      // Notification for Super Admin about pending approvals
+      if (user.role === "superAdmin") {
+        const checkPendingUsers = async () => {
+          try {
+            const hasShown = sessionStorage.getItem("hasShownPendingToast");
+            if (!hasShown) {
+              sessionStorage.setItem("hasShownPendingToast", "true");
+              const res = await axios.get(
+                "/api/v1/users?status=pending&limit=1",
+              );
+              if (res.data.totalResults > 0) {
+                toast.info(
+                  `Attention: There are ${res.data.totalResults} pending college admin registrations awaiting approval.`,
+                  {
+                    position: "top-center",
+                    autoClose: 10000,
+                    icon: "🔔",
+                  },
+                );
+              }
+            }
+          } catch (err) {
+            console.error("Pending users check failed:", err);
+          }
+        };
+        checkPendingUsers();
+      }
     }
   }, [user]);
 

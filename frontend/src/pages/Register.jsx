@@ -58,8 +58,15 @@ const Register = () => {
         formData.adminPin,
       );
       if (res.success) {
-        toast.success("Registration Successful");
-        navigate("/dashboard");
+        if (res.message && res.message.includes("wait for the Super Admin")) {
+          // Toast message already handled by AuthContext? No, AuthContext typically returns the data.
+          // Let's ensure the toast shows the actual message.
+          toast.success(res.message);
+          navigate("/login");
+        } else {
+          toast.success("Registration Successful");
+          navigate("/dashboard");
+        }
       } else {
         toast.error(res.message);
       }

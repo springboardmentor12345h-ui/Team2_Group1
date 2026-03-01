@@ -34,6 +34,7 @@ const Navbar = () => {
 
   const handleLogout = () => {
     setIsProfileOpen(false);
+    sessionStorage.removeItem("hasShownPendingToast");
     logout();
     navigate("/login");
   };
