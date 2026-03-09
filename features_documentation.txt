@@ -51,7 +51,7 @@ implemented to enhance platform security and management.
 --------------------------------------------------------------------------------
 
 - ACCOUNT DELETION PROTECTION:
-  Implemented safety measures to prevent any administrative(College Admin) user from 
+  Implemented safety measures to prevent any administrative(Super Admin) user from 
   accidentally deleting their own account.
 
 - INTELLIGENT NAVIGATION:
