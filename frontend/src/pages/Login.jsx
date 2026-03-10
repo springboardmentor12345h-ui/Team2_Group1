@@ -99,14 +99,14 @@ const Login = () => {
               </div>
             </div>
 
-            {/* Demo Credentials */}
             <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 text-sm">
               <p className="font-semibold text-primary-900 mb-1">
                 DEMO CREDENTIALS:
               </p>
               <div className="space-y-1 font-mono text-xs text-primary-700">
+                <p>Super Admin: admin@example.com / test1234</p>
+                <p>College Admin: admin@college.edu / test1234</p>
                 <p>Student: max@example.com / test1234</p>
-                <p>College Admin: admin@example.com / test1234</p>
               </div>
             </div>
 

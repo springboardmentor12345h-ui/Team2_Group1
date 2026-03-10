@@ -1,5 +1,4 @@
 import React, { useContext, useMemo, useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
@@ -20,51 +19,7 @@ import {
   MapPinIcon,
 } from "@heroicons/react/24/solid";
 import AuthContext from "../context/AuthContext";
-import Lenis from "lenis";
 import "./Landing.css";
-
-const ParticleBackground = () => {
-  const particles = useMemo(
-    () =>
-      [...Array(20)].map((_, i) => ({
-        id: i,
-        size: Math.random() * 4 + 2,
-        x: Math.random() * 100,
-        y: Math.random() * 100,
-        duration: Math.random() * 20 + 10,
-        delay: Math.random() * 5,
-      })),
-    [],
-  );
-
-  return (
-    <div className="particles-container">
-      {particles.map((p) => (
-        <motion.div
-          key={p.id}
-          className="absolute rounded-full bg-purple-500/10"
-          style={{
-            width: p.size,
-            height: p.size,
-            left: `${p.x}%`,
-            top: `${p.y}%`,
-          }}
-          animate={{
-            y: [0, -100, 0],
-            opacity: [0.2, 0.5, 0.2],
-            scale: [1, 1.2, 1],
-          }}
-          transition={{
-            duration: p.duration,
-            repeat: Infinity,
-            delay: p.delay,
-            ease: "linear",
-          }}
-        />
-      ))}
-    </div>
-  );
-};
 
 const Landing = () => {
   const { user } = useContext(AuthContext);
@@ -73,35 +28,14 @@ const Landing = () => {
   const [loadingEvents, setLoadingEvents] = useState(true);
 
   useEffect(() => {
-    const lenis = new Lenis({
-      duration: 1.2,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      orientation: "vertical",
-      gestureOrientation: "vertical",
-      smoothWheel: true,
-      wheelMultiplier: 1,
-      smoothTouch: false,
-      touchMultiplier: 2,
-      infinite: false,
-    });
-
-    function raf(time) {
-      lenis.raf(time);
-      requestAnimationFrame(raf);
-    }
-
-    requestAnimationFrame(raf);
-
-    return () => {
-      lenis.destroy();
-    };
+    window.scrollTo(0, 0);
   }, []);
 
   useEffect(() => {
     const fetchTrendingEvents = async () => {
       try {
         const { data } = await axios.get(
-          "/api/v1/events?sort=-createdAt&limit=3",
+          `/api/v1/events?endDate[gte]=${new Date().toISOString()}&sort=startDate&limit=3`,
         );
         if (data.status === "success") {
           setTrendingEvents(data.data.events);
@@ -114,13 +48,6 @@ const Landing = () => {
     };
     fetchTrendingEvents();
   }, []);
-
-  const fadeIn = {
-    initial: { opacity: 0, y: 30 },
-    whileInView: { opacity: 1, y: 0 },
-    viewport: { once: true, margin: "-100px" },
-    transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
-  };
 
   const categories = useMemo(
     () => [
@@ -156,9 +83,9 @@ const Landing = () => {
       },
       {
         title: "Buzz",
-        icon: MegaphoneIcon,
-        label: "NEWS",
-        desc: "Instant announcements and flash event notifications in one place.",
+        icon: SparklesIcon,
+        label: "SEMINARS",
+        desc: "Stay updated with the latest trends, startup pitches, and tech talks.",
       },
     ],
     [],
@@ -166,53 +93,45 @@ const Landing = () => {
 
   return (
     <div className="landing-root">
-      <ParticleBackground />
-
       {/* Light Theme Background */}
       <div className="universe-bg">
-        <div className="stars-overlay" />
         <div className="neon-grid" />
-        <div className="spotlight" style={{ left: "5%", top: "10%" }} />
-        <div
-          className="spotlight"
-          style={{
-            right: "5%",
-            bottom: "5%",
-            background:
-              "radial-gradient(circle, rgba(124, 58, 237, 0.08) 0%, transparent 70%)",
-          }}
-        />
+        <div className="spotlight spotlight-1" />
+        <div className="spotlight spotlight-2" />
+        <div className="spotlight spotlight-3" />
       </div>
 
-      {/* Modern Light Navbar */}
-      <nav className="fixed top-0 left-0 w-full z-[100] px-8 py-6 flex justify-between items-center backdrop-blur-md border-b border-purple-100 bg-white/70">
-        <Link to="/" className="flex items-center gap-2 group">
-          <RocketLaunchIcon className="w-9 h-9 text-purple-600 group-hover:rotate-12 transition-transform" />
-          <span className="font-black text-2xl tracking-tighter text-slate-900">
-            CAMPUS EVENT HUB
+      {/* Navigation */}
+      <nav className="fixed top-0 left-0 right-0 z-50 px-10 py-6 flex justify-between items-center bg-white/80 backdrop-blur-md border-b border-slate-100">
+        <div className="flex items-center gap-3">
+          <div className="bg-purple-600 p-2 rounded-xl shadow-lg shadow-purple-200">
+            <RocketLaunchIcon className="w-6 h-6 text-white" />
+          </div>
+          <span className="font-black text-2xl text-slate-900 tracking-tighter">
+            HUB
           </span>
-        </Link>
-        <div className="flex gap-4 items-center">
-          {user ? (
-            <Link to="/dashboard">
-              <button className="bg-purple-600 text-white px-6 py-2.5 rounded-xl text-xs font-black hover:bg-purple-700 hover:shadow-lg hover:shadow-purple-200 transition-all uppercase tracking-widest">
-                DASHBOARD
-              </button>
-            </Link>
-          ) : (
+        </div>
+        <div className="flex items-center gap-12">
+          {!user ? (
             <>
               <Link
                 to="/login"
-                className="text-sm font-bold text-slate-600 hover:text-purple-600 transition-colors px-4"
+                className="text-xs font-black text-slate-400 hover:text-purple-600 tracking-[0.2em] transition-colors"
               >
-                LOG IN
+                LOGIN
               </Link>
               <Link to="/register">
-                <button className="bg-slate-900 text-white px-6 py-2.5 rounded-xl text-xs font-black hover:bg-black transition-all tracking-widest">
-                  JOIN HUB
+                <button className="bg-slate-900 text-white px-8 py-3 rounded-2xl text-xs font-black tracking-[0.2em] hover:bg-purple-600 transition-all shadow-xl shadow-slate-200">
+                  JOIN NOW
                 </button>
               </Link>
             </>
+          ) : (
+            <Link to="/events">
+              <button className="bg-slate-900 text-white px-8 py-3 rounded-2xl text-xs font-black tracking-[0.2em] hover:bg-purple-600 transition-all">
+                DASHBOARD
+              </button>
+            </Link>
           )}
         </div>
       </nav>
@@ -220,18 +139,14 @@ const Landing = () => {
       <main className="relative z-10 font-sans">
         {/* HERO SECTION */}
         <section className="landing-section">
-          <motion.div {...fadeIn} className="max-w-4xl text-center px-4">
-            <motion.div
-              className="inline-flex items-center gap-2 bg-purple-50 text-purple-600 border border-purple-100 px-5 py-2 rounded-full text-[11px] font-black tracking-[0.2em] mb-10"
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-            >
+          <div className="max-w-4xl text-center px-4">
+            <div className="inline-flex items-center gap-2 bg-purple-50 text-purple-600 border border-purple-100 px-5 py-2 rounded-full text-[11px] font-black tracking-[0.2em] mb-10">
               <SparklesIcon className="w-4 h-4" /> THE ULTIMATE CAMPUS UNIVERSE
-            </motion.div>
+            </div>
             <h1 className="mega-title mb-14 tracking-tight">
               Elevate Your
               <br />
-              <span>College Journey.</span>
+              <span className="text-purple-600">College Journey.</span>
             </h1>
             <p className="text-slate-500 text-xl max-w-2xl mx-auto mb-12 font-medium leading-relaxed">
               Discover elite hackathons, cultural festivals, and sports leagues.
@@ -255,13 +170,13 @@ const Landing = () => {
                 </div>
               ))}
             </div>
-          </motion.div>
+          </div>
         </section>
 
         {/* SERVICES SECTION */}
         <section className="landing-section bg-slate-50/50">
           <div className="max-w-7xl w-full px-4">
-            <motion.div {...fadeIn} className="mb-20 text-center">
+            <div className="mb-20 text-center">
               <h2 className="text-5xl font-black text-slate-900 italic mb-4">
                 ENDLESS OPPORTUNITIES
               </h2>
@@ -270,17 +185,10 @@ const Landing = () => {
                 Wherever your passion lies, we bridge the gap between campus and
                 career.
               </p>
-            </motion.div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {categories.map((cat, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className="glass-card group border-white/50"
-                >
+                <div key={i} className="glass-card group border-white/50">
                   <div className="flex justify-between items-start mb-8">
                     <div className="p-4 bg-purple-50 rounded-2xl group-hover:bg-purple-600 group-hover:text-white transition-all duration-300">
                       <cat.icon className="w-8 h-8 text-purple-600 group-hover:text-white" />
@@ -295,7 +203,7 @@ const Landing = () => {
                   <p className="text-sm text-slate-500 leading-relaxed font-medium">
                     {cat.desc}
                   </p>
-                </motion.div>
+                </div>
               ))}
             </div>
           </div>
@@ -304,26 +212,23 @@ const Landing = () => {
         {/* TRENDING FEED (REAL DATA) */}
         <section className="landing-section">
           <div className="max-w-5xl w-full px-4">
-            <motion.div
-              {...fadeIn}
-              className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4"
-            >
+            <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
               <div>
                 <h2 className="text-5xl font-black text-slate-900 flex items-center gap-4">
                   <FireIcon className="w-10 h-10 text-orange-500" /> TRENDING
                   NOW
                 </h2>
                 <p className="text-slate-400 font-bold tracking-widest mt-2 uppercase text-xs">
-                  Recently added elite events from top colleges
+                  Upcoming elite events from top colleges
                 </p>
               </div>
               <Link
                 to="/events"
                 className="text-purple-600 font-black text-sm hover:underline"
               >
-                EXPLORE ALL EVENTS →
+                EXPLORE ALL EVENTS &rarr;
               </Link>
-            </motion.div>
+            </div>
 
             <div className="grid grid-cols-1 gap-6">
               {loadingEvents ? (
@@ -334,13 +239,9 @@ const Landing = () => {
                   />
                 ))
               ) : trendingEvents.length > 0 ? (
-                trendingEvents.map((ev, i) => (
-                  <motion.div
+                trendingEvents.map((ev) => (
+                  <div
                     key={ev._id}
-                    initial={{ opacity: 0, x: -20 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: i * 0.1 }}
                     className="glass-card flex flex-col sm:flex-row items-center justify-between p-8 gap-8 border-slate-100 bg-white/40 cursor-pointer"
                     onClick={() => navigate("/events")}
                   >
@@ -373,13 +274,11 @@ const Landing = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-6 w-full sm:w-auto justify-end">
-                      <Link to={`/events`}>
-                        <button className="bg-slate-900 text-white px-8 py-3.5 rounded-2xl text-[11px] font-black hover:bg-purple-600 transition-all shadow-lg shadow-slate-200">
-                          VIEW DETAILS
-                        </button>
-                      </Link>
+                      <button className="bg-slate-900 text-white px-8 py-3.5 rounded-2xl text-[11px] font-black hover:bg-purple-600 transition-all shadow-lg shadow-slate-200">
+                        VIEW DETAILS
+                      </button>
                     </div>
-                  </motion.div>
+                  </div>
                 ))
               ) : (
                 <div className="text-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
@@ -395,7 +294,7 @@ const Landing = () => {
         {/* ECOSYSTEM (TRUST & ROADMAP) */}
         <section className="landing-section bg-slate-50/50">
           <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-2 gap-24 items-start px-4">
-            <motion.div {...fadeIn} className="space-y-12">
+            <div className="space-y-12">
               <h2 className="text-6xl font-black text-slate-900 italic leading-tight">
                 BUILT FOR
                 <br />
@@ -434,8 +333,8 @@ const Landing = () => {
                   </div>
                 ))}
               </div>
-            </motion.div>
-            <motion.div {...fadeIn} className="space-y-8">
+            </div>
+            <div className="space-y-8">
               <h3 className="text-xl font-black text-purple-600 mb-8 px-4 border-l-4 border-purple-600 tracking-widest uppercase">
                 The Roadmap
               </h3>
@@ -473,18 +372,14 @@ const Landing = () => {
                   </div>
                 </div>
               ))}
-            </motion.div>
+            </div>
           </div>
         </section>
 
         {/* PORTAL SECTION */}
         <section className="landing-section">
           <div className="max-w-6xl w-full grid grid-cols-1 md:grid-cols-2 gap-10 px-4">
-            <motion.div
-              {...fadeIn}
-              whileHover={{ scale: 1.02 }}
-              className="glass-card bg-white border-purple-100 p-12 text-center group hover:bg-purple-50 transition-all duration-500 flex flex-col h-full"
-            >
+            <div className="glass-card bg-white border-purple-100 p-12 text-center group hover:bg-purple-50 transition-all duration-500 flex flex-col h-full">
               <UserGroupIcon className="w-20 h-20 text-purple-600 mx-auto mb-8 transition-transform group-hover:scale-110" />
               <h2 className="text-4xl font-black text-slate-900 mb-6 group-hover:text-purple-700">
                 FOR STUDENTS
@@ -497,12 +392,8 @@ const Landing = () => {
                   EXPLORE HUB
                 </button>
               </Link>
-            </motion.div>
-            <motion.div
-              {...fadeIn}
-              whileHover={{ scale: 1.02 }}
-              className="glass-card bg-white border-purple-100 p-12 text-center group hover:bg-purple-50 transition-all duration-500 flex flex-col h-full"
-            >
+            </div>
+            <div className="glass-card bg-white border-purple-100 p-12 text-center group hover:bg-purple-50 transition-all duration-500 flex flex-col h-full">
               <BuildingLibraryIcon className="w-20 h-20 text-purple-600 mx-auto mb-8 transition-transform group-hover:scale-110" />
               <h2 className="text-4xl font-black text-slate-900 mb-6 group-hover:text-purple-700">
                 FOR COLLEGES
@@ -515,24 +406,93 @@ const Landing = () => {
                   HOST EVENT
                 </button>
               </Link>
-            </motion.div>
+            </div>
+          </div>
+        </section>
+
+        {/* COLLEGE REGISTRATION INFO */}
+        <section className="landing-section bg-slate-50/50 overflow-hidden relative border-y border-slate-100">
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-purple-400 rounded-full blur-[120px] -translate-x-1/2 -translate-y-1/2" />
+            <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-blue-400 rounded-full blur-[120px] translate-x-1/2 translate-y-1/2" />
+          </div>
+
+          <div className="max-w-4xl w-full px-6 relative z-10 text-center">
+            <div className="space-y-10">
+              <div className="inline-flex items-center gap-3 bg-purple-100 text-purple-600 border border-purple-200 px-6 py-2.5 rounded-full text-[11px] font-black tracking-[0.2em] uppercase">
+                <BuildingLibraryIcon className="w-4 h-4" /> PARTNER WITH THE HUB
+              </div>
+
+              <h2 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tighter italic leading-none">
+                EXPAND YOUR
+                <br />
+                <span className="text-purple-600">CAMPUS REACH.</span>
+              </h2>
+
+              <p className="text-slate-500 text-lg md:text-xl font-medium max-w-2xl mx-auto leading-relaxed">
+                Empower your students by bringing the nation's premier event hub
+                to your institution. Join 120+ leading colleges in building the
+                future of campus engagement.
+              </p>
+
+              <div className="glass-card p-10 md:p-14 mt-12 relative group bg-white/60">
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-purple-600 p-4 rounded-2xl shadow-xl shadow-purple-200">
+                  <MegaphoneIcon className="w-8 h-8 text-white" />
+                </div>
+
+                <h3 className="text-2xl md:text-3xl font-black text-slate-900 mb-6 mt-4 tracking-tight">
+                  Register Your College
+                </h3>
+
+                <p className="text-slate-500 mb-10 text-lg font-medium leading-relaxed">
+                  To become a verified college administrator and unlock hosting
+                  privileges for your campus, please get in touch with our
+                  partnerships team.
+                </p>
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-8">
+                  <a
+                    href="mailto:admin@example.com"
+                    className="w-full sm:w-auto flex items-center justify-center gap-4 bg-slate-900 text-white hover:bg-purple-600 px-10 py-5 rounded-2xl font-black text-sm tracking-[0.1em] transition-all duration-300 shadow-xl"
+                  >
+                    SEND EMAIL
+                  </a>
+
+                  <div className="flex flex-col items-center sm:items-start text-left">
+                    <span className="text-[10px] font-black text-slate-400 tracking-widest uppercase mb-1">
+                      Direct Inquiry
+                    </span>
+                    <span className="text-xl font-bold text-slate-900 tracking-tight border-b-2 border-purple-600/20">
+                      admin@example.com
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-8">
+                <p className="text-slate-400 text-[10px] font-black tracking-[0.3em] uppercase">
+                  * Official college email required for verification
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 
         {/* FINAL CTA */}
         <section className="landing-section">
-          <motion.div {...fadeIn} className="text-center px-4">
-            <RocketLaunchIcon className="w-24 h-24 text-purple-500 mx-auto mb-12 animate-pulse" />
+          <div className="text-center px-4">
+            <RocketLaunchIcon className="w-24 h-24 text-purple-500 mx-auto mb-12" />
             <h2 className="text-7xl font-black text-slate-900 tracking-tighter italic mb-6">
               ALL SYSTEMS GO.
             </h2>
             <p className="text-slate-400 text-xl font-bold tracking-widest uppercase mb-12">
-              Your college journey starts here.
+              Your <span className="text-purple-600">college journey</span>{" "}
+              starts here.
             </p>
             <Link to="/register">
               <button className="glow-btn">ENTER THE HUB</button>
             </Link>
-          </motion.div>
+          </div>
         </section>
       </main>
 
@@ -557,7 +517,7 @@ const Landing = () => {
             </a>
           </div>
           <div className="text-[11px] font-bold text-slate-400">
-            © 2026 CAMPUS EVENT HUB. EMPOWERING THE NEXT GEN.
+            &copy; 2026 CAMPUS EVENT HUB. EMPOWERING THE NEXT GEN.
           </div>
         </div>
       </footer>

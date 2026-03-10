@@ -1,13 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 
-const Modal = ({
-  isOpen,
-  onClose,
-  title,
-  children,
-  maxWidth = "max-w-4xl",
-}) => {
+const Modal = ({ isOpen, onClose, children, maxWidth = "max-w-4xl" }) => {
   const modalRef = useRef();
 
   useEffect(() => {
@@ -31,20 +25,17 @@ const Modal = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 lg:p-8">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-secondary-900/60 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-secondary-900/80" onClick={onClose} />
 
       {/* Modal Content */}
       <div
         ref={modalRef}
-        className={`relative w-full ${maxWidth} bg-white rounded-3xl shadow-2xl overflow-hidden transform transition-all animate-in zoom-in-95 duration-300`}
+        className={`relative w-full ${maxWidth} bg-white rounded-3xl shadow-lg overflow-hidden`}
       >
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/10 hover:bg-black/20 transition-colors text-white hover:text-white sm:text-secondary-500 sm:bg-transparent"
+          className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/10 hover:bg-black/20 text-white hover:text-white sm:text-secondary-500 sm:bg-transparent"
         >
           <XMarkIcon className="w-6 h-6" />
         </button>

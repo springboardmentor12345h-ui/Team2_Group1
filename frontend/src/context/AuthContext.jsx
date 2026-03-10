@@ -54,6 +54,9 @@ export const AuthProvider = ({ children }) => {
         role,
         adminPin,
       });
+      if (data.data.user.status === "pending") {
+        return { success: true, message: data.message };
+      }
       const userData = data.data.user;
       localStorage.setItem("userInfo", JSON.stringify(userData));
       setUser(userData);

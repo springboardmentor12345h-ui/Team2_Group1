@@ -45,7 +45,12 @@ const userSchema = mongoose.Schema({
   },
   adminPin: {
     type: String,
-    select: false, // Don't return this in queries
+    select: false,
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'approved',
   },
 });
 

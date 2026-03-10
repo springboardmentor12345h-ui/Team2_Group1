@@ -1,0 +1,85 @@
+================================================================================
+CAMPUS EVENT HUB - NEW ADMINISTRATIVE FEATURES
+================================================================================
+
+This document outlines the administrative features and access controls
+implemented to enhance platform security and management.
+
+--------------------------------------------------------------------------------
+1. COLLEGE ADMIN REGISTRATION & APPROVAL
+--------------------------------------------------------------------------------
+
+- MANUAL APPROVAL WORKFLOW:
+  All new College Admin registrations now default to a 'Pending' status.
+  Admins are NOT logged in immediately and must wait for review.
+
+- SUPER ADMIN REVIEW:
+  Super Admins have the authority to 'Approve' or 'Reject' pending
+  registrations directly from the User Management interface.
+
+- LOGIN PROTECTION:
+  Access is strictly blocked for any account marked as 'Pending' or
+  'Rejected', with clear feedback providing next steps for the user.
+
+--------------------------------------------------------------------------------
+2. ROLE-BASED ACCESS CONTROLS (RBAC)
+--------------------------------------------------------------------------------
+
+- SUPER ADMIN (MASTER ACCESS):
+  Full visibility of all system modules including User Management, 
+  System Health Metrics, Event Management, and Admin Logs.
+
+- COLLEGE ADMIN (ORGANIZER ACCESS):
+  Streamlined interface focused on Event Management and Dashboard 
+  Overview. Access to 'User Management', 'Admin Logs', and 'System 
+  Health' is restricted to maintain platform security.
+
+--------------------------------------------------------------------------------
+3. PROACTIVE ADMINISTRATIVE ALERTS
+--------------------------------------------------------------------------------
+
+- LOGIN NOTIFICATIONS:
+  Super Admins receive an immediate 'Attention' alert upon logging in if 
+  there are any pending registrations awaiting their approval.
+
+- DYNAMIC NOTIFICATION DOTS:
+  A red pulsating notification dot appears on the 'User Management' tab 
+  within the Admin Panel to signal active pending tasks.
+
+--------------------------------------------------------------------------------
+4. SYSTEM SECURITY & STABILITY
+--------------------------------------------------------------------------------
+
+- ACCOUNT DELETION PROTECTION:
+  Implemented safety measures to prevent any administrative(Super Admin) user from 
+  accidentally deleting their own account.
+
+- INTELLIGENT NAVIGATION:
+  The system now waits for authentication profiles to load before deciding 
+  access rights, ensuring authorized users are never incorrectly 
+  redirected to the static dashboard.
+
+--------------------------------------------------------------------------------
+5. ADVANCED EVENT FILTERING
+--------------------------------------------------------------------------------
+
+- MULTI-PARAMETER SEARCH:
+  Users can search for events using keywords that match titles,
+  descriptions, or specific categories.
+
+- STATUS-BASED FILTERING:
+  Quickly toggle between 'Upcoming' and 'Completed' events to stay
+  informed about current and past activities.
+
+- CALENDAR-DATE SPECIFICITY:
+  A dedicated date picker allows users to find events scheduled for a
+  particular day, enhancing planning capabilities.
+
+- CATEGORIAL DISCOVERY:
+  Filter events by specific genres such as Hackathons, Cultural fests, 
+  Sports meets, or educational Workshops.
+
+
+================================================================================
+End of Feature Documentation
+================================================================================
