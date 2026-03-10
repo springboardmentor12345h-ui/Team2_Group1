@@ -2,6 +2,7 @@ import React, { useContext, useState } from "react";
 import Modal from "./ui/Modal";
 import AuthContext from "../context/AuthContext";
 import { toast } from "react-toastify";
+import axios from "axios";
 import {
   CalendarIcon,
   ClockIcon,
@@ -46,13 +47,16 @@ const EventDetailsModal = ({ isOpen, onClose, event }) => {
 
   const handleConfirmRegistration = async () => {
     setIsSubmitting(true);
-    // Simulating API call for registration
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setShowConfirmation(false);
+    try {
+      await axios.post("/api/v1/registrations", { eventId: event._id });
       toast.success(`Successfully registered for ${event.title}!`);
+      setShowConfirmation(false);
       onClose();
-    }, 1500);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Registration failed");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
