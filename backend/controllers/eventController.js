@@ -35,9 +35,9 @@ exports.uploadEventImage = upload.single('image');
 
 exports.getAllEvents = async (req, res) => {
   try {
-    // 1) Filtering
-    const queryObj = { ...req.query };
-    const excludedFields = ['page', 'sort', 'limit', 'fields', 'search'];
+    let queryObj = { ...req.query };
+
+    const excludedFields = ["page", "sort", "limit", "fields", "search"];
     excludedFields.forEach((el) => delete queryObj[el]);
 
     // Handle nested and unnested advanced filters (gte, gt, lte, lt)
@@ -135,7 +135,7 @@ exports.getAllEvents = async (req, res) => {
 
     // 6) Pagination
     const page = req.query.page * 1 || 1;
-    const limit = req.query.limit * 1 || 100;
+    const limit = req.query.limit * 1 || 6;
     const skip = (page - 1) * limit;
     pipeline.push({ $skip: skip });
     pipeline.push({ $limit: limit });
@@ -161,17 +161,17 @@ exports.getAllEvents = async (req, res) => {
     const events = await Event.aggregate(pipeline);
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       results: events.length,
       totalResults,
       data: {
         events,
       },
     });
-  } catch (error) {
-    res.status(404).json({
-      status: 'fail',
-      message: error.message,
+  } catch (err) {
+    res.status(400).json({
+      status: "fail",
+      message: err.message,
     });
   }
 };

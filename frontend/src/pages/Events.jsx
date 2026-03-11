@@ -23,11 +23,13 @@ const Events = () => {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All Types");
+  const [selectedDate, setSelectedDate] = useState(""); // ✅ Date filter added
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [status, setStatus] = useState("All");
   const [date, setDate] = useState("");
 
+  // Reset page when filters change
   useEffect(() => {
     setPage(1);
   }, [query, category, status, date]);
@@ -48,14 +50,11 @@ const Events = () => {
       if (status === "Completed")
         url += `endDate[lt]=${new Date().toISOString()}&`;
       if (date) {
-        const selectedDate = new Date(date);
-        const startOfDay = new Date(
-          selectedDate.setHours(0, 0, 0, 0),
-        ).toISOString();
-        const endOfDay = new Date(
-          selectedDate.setHours(23, 59, 59, 999),
-        ).toISOString();
-        url += `startDate[gte]=${startOfDay}&startDate[lte]=${endOfDay}&`;
+        // ✅ Date Filter (No timezone shift issue)
+        const startOfDay = `${date}T00:00:00`;
+        const endOfDay = `${date}T23:59:59`;
+        url += `startDate[gte]=${startOfDay}&`;
+        url += `startDate[lte]=${endOfDay}&`;
       }
 
       const { data } = await axios.get(url);
@@ -69,10 +68,12 @@ const Events = () => {
     }
   };
 
+  // Debounced fetch
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       fetchEvents();
     }, 500);
+
     return () => clearTimeout(timeoutId);
   }, [query, category, page, status, date]);
 
@@ -111,6 +112,7 @@ const Events = () => {
   return (
     <div className="min-h-screen bg-secondary-50 pb-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-bold text-secondary-900">
@@ -140,7 +142,7 @@ const Events = () => {
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search events by title, description or category..."
+                placeholder="Search events..."
                 className="pl-10 h-12"
               />
               <MagnifyingGlassIcon className="w-5 h-5 text-secondary-400 absolute left-3 top-3.5" />
