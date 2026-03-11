@@ -16,10 +16,27 @@ import {
   AcademicCapIcon,
 } from "@heroicons/react/24/outline";
 
-const EventDetailsModal = ({ isOpen, onClose, event }) => {
+const EventDetailsModal = ({ isOpen, onClose, event, onRegisterSuccess }) => {
   const { user } = useContext(AuthContext);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRegistered, setIsRegistered] = useState(false);
+
+  React.useEffect(() => {
+    const checkRegistration = async () => {
+      if (!user || user.role !== "student" || !event) return;
+      try {
+        const { data } = await axios.get("/api/v1/registrations/my-registrations");
+        const registered = data.data.registrations.some(r => r.eventId._id === event._id);
+        setIsRegistered(registered);
+      } catch (error) {
+        console.error("Check registration failed", error);
+      }
+    };
+    if (isOpen) {
+      checkRegistration();
+    }
+  }, [isOpen, user, event]);
 
   if (!event) return null;
 
@@ -50,6 +67,8 @@ const EventDetailsModal = ({ isOpen, onClose, event }) => {
     try {
       await axios.post("/api/v1/registrations", { eventId: event._id });
       toast.success(`Successfully registered for ${event.title}!`);
+      setIsRegistered(true);
+      if (onRegisterSuccess) onRegisterSuccess();
       setShowConfirmation(false);
       onClose();
     } catch (error) {
@@ -58,6 +77,8 @@ const EventDetailsModal = ({ isOpen, onClose, event }) => {
       setIsSubmitting(false);
     }
   };
+
+
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} maxWidth="max-w-3xl">
@@ -83,10 +104,16 @@ const EventDetailsModal = ({ isOpen, onClose, event }) => {
                 className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                   new Date() > new Date(event.endDate)
                     ? "bg-red-600 text-white"
+                    : new Date() >= new Date(event.startDate)
+                    ? "bg-orange-500 text-white"
                     : "bg-success/90 text-white"
                 }`}
               >
-                {new Date() > new Date(event.endDate) ? "Completed" : "Active"}
+                {new Date() > new Date(event.endDate) 
+                  ? "Completed" 
+                  : new Date() >= new Date(event.startDate) 
+                  ? "Ongoing" 
+                  : "Upcoming"}
               </span>
             </div>
           </div>
@@ -230,11 +257,16 @@ const EventDetailsModal = ({ isOpen, onClose, event }) => {
                     <ClockIcon className="w-5 h-5" />
                     EVENT COMPLETED
                   </div>
+                ) : isRegistered ? (
+                   <div className="flex-1 bg-primary-100 text-primary-600 font-bold py-4 rounded-2xl flex items-center justify-center gap-2 cursor-default border border-primary-200">
+                    <CheckCircleIcon className="w-5 h-5" />
+                    ALREADY REGISTERED
+                  </div>
                 ) : (
                   <button
                     className={`flex-1 ${
                       user?.role === "student"
-                        ? "bg-primary-600 hover:bg-primary-700"
+                        ? "bg-primary-600 hover:bg-primary-700 font-black shadow-lg shadow-primary-200"
                         : "bg-secondary-300 cursor-not-allowed"
                     } text-white font-bold py-4 rounded-2xl active:scale-95`}
                     onClick={handleRegisterClick}

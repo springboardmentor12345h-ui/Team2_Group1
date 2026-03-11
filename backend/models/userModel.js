@@ -52,6 +52,10 @@ const userSchema = mongoose.Schema({
     enum: ['pending', 'approved', 'rejected'],
     default: 'approved',
   },
+  lastViewedEventsAt: {
+    type: Date,
+    default: Date.now,
+  },
 });
 
 userSchema.pre('save', async function () {

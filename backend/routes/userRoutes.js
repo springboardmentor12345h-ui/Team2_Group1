@@ -7,6 +7,7 @@ const {
   restrictTo,
   deleteUser,
   updateUserStatus,
+  updateLastViewedEvents,
 } = require('../controllers/userController');
 
 const router = express.Router();
@@ -22,5 +23,7 @@ router
   .route('/:id')
   .delete(protect, restrictTo('superAdmin'), deleteUser)
   .patch(protect, restrictTo('superAdmin'), updateUserStatus);
+
+router.patch('/update-last-viewed-events', protect, updateLastViewedEvents);
 
 module.exports = router;
