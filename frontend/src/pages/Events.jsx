@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useCallback } from "react";
 import {
   CalendarIcon,
   ClockIcon,
@@ -23,11 +23,12 @@ const Events = () => {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All Types");
-  const [selectedDate, setSelectedDate] = useState(""); // ✅ Date filter added
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [status, setStatus] = useState("All");
   const [date, setDate] = useState("");
+  const [userRegistrations, setUserRegistrations] = useState([]);
+
 
   // Reset page when filters change
   useEffect(() => {
@@ -39,7 +40,7 @@ const Events = () => {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
       let url = `/api/v1/events?page=${page}&limit=6&`;
@@ -66,21 +67,43 @@ const Events = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, query, category, status, date]);
 
-  // Debounced fetch
+
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       fetchEvents();
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [query, category, page, status, date]);
+  }, [fetchEvents, query, category, page, status, date]);
+
+  const fetchUserRegistrations = useCallback(async () => {
+    if (!user || user.role !== "student") return;
+    try {
+      const { data } = await axios.get("/api/v1/registrations/my-registrations");
+      setUserRegistrations(data.data.registrations.map((r) => r.eventId._id));
+    } catch (error) {
+      console.error("Failed to load user registrations", error);
+    }
+  }, [user]);
+
+
+  useEffect(() => {
+    fetchUserRegistrations();
+  }, [fetchUserRegistrations]);
+
 
   const handleViewDetails = (event) => {
+    if (userRegistrations.includes(event._id)) {
+      toast.info("You are already registered for this event.");
+      return;
+    }
     setSelectedEvent(event);
     setIsDetailsOpen(true);
   };
+
+
 
   const getCategoryColor = (cat) => {
     const colors = {
@@ -108,6 +131,17 @@ const Events = () => {
       "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=800&auto=format&fit=crop"
     );
   };
+
+  const getEventStatus = (event) => {
+    const now = new Date();
+    const start = new Date(event.startDate);
+    const end = new Date(event.endDate);
+
+    if (now > end) return "Completed";
+    if (now >= start && now <= end) return "Ongoing";
+    return "Upcoming";
+  };
+
 
   return (
     <div className="min-h-screen bg-secondary-50 pb-12">
@@ -216,16 +250,23 @@ const Events = () => {
                     alt={event.title}
                     className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
                   />
-                  <div
-                    className={`absolute top-4 right-4 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-black shadow-lg border uppercase tracking-widest ${
-                      new Date() > new Date(event.endDate)
-                        ? "bg-red-50 text-red-600 border-red-100"
-                        : "bg-success/10 text-success border-success/20"
-                    }`}
-                  >
-                    {new Date() > new Date(event.endDate)
-                      ? "Completed"
-                      : "Upcoming"}
+                  <div className="absolute top-4 right-4 flex flex-col gap-2 items-end">
+                    <div
+                      className={`backdrop-blur-sm px-3 py-1 rounded-full text-xs font-black shadow-lg border uppercase tracking-widest ${
+                        getEventStatus(event) === "Completed"
+                          ? "bg-red-50 text-red-600 border-red-100"
+                          : getEventStatus(event) === "Ongoing"
+                            ? "bg-orange-50 text-orange-600 border-orange-100"
+                            : "bg-success/10 text-success border-success/20"
+                      }`}
+                    >
+                      {getEventStatus(event)}
+                    </div>
+                    {userRegistrations.includes(event._id) && (
+                      <div className="bg-primary-600 text-white px-3 py-1 rounded-full text-xs font-black shadow-lg uppercase tracking-widest border border-primary-500">
+                        Registered
+                      </div>
+                    )}
                   </div>
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <span className="bg-white text-secondary-900 px-6 py-2 rounded-full font-bold shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform">
@@ -276,12 +317,22 @@ const Events = () => {
                   </div>
 
                   <Button
-                    variant="outline"
-                    className="w-full justify-center rounded-xl py-3 border-secondary-200 group-hover:border-primary-500 group-hover:bg-primary-50 group-hover:text-primary-700 transition-all font-bold"
-                    onClick={() => handleViewDetails(event)}
+                    variant={userRegistrations.includes(event._id) ? "primary" : "outline"}
+                    className={`w-full justify-center rounded-xl py-3 font-bold transition-all ${
+                       userRegistrations.includes(event._id) 
+                       ? "bg-primary-600 text-white border-primary-600 cursor-default" 
+                       : "border-secondary-200 group-hover:border-primary-500 group-hover:bg-primary-50 group-hover:text-primary-700"
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!userRegistrations.includes(event._id)) {
+                        handleViewDetails(event);
+                      }
+                    }}
                   >
-                    View Full Details
+                    {userRegistrations.includes(event._id) ? "Registered" : "View Full Details"}
                   </Button>
+
                 </div>
               </Card>
             ))}
@@ -366,7 +417,9 @@ const Events = () => {
         isOpen={isDetailsOpen}
         onClose={() => setIsDetailsOpen(false)}
         event={selectedEvent}
+        onRegisterSuccess={fetchUserRegistrations}
       />
+
 
       <CreateEventModal
         isOpen={isCreateOpen}

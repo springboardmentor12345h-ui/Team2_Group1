@@ -1,4 +1,4 @@
-import { useContext, useState, useEffect } from "react";
+import { useContext, useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CalendarIcon,
@@ -25,12 +25,20 @@ const Dashboard = () => {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [regCount, setRegCount] = useState(0);
+  const [registrations, setRegistrations] = useState([]);
+  const [activeTab, setActiveTab] = useState("Upcoming");
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [hasNewEvents, setHasNewEvents] = useState(false);
+
+
+
 
   // Modal State
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     try {
       // Fetch events (accessible to all)
@@ -51,7 +59,14 @@ const Dashboard = () => {
         }
       });
 
+
       setUpcomingEvents(sortedEvents);
+
+      // Check for new events since last viewed
+      if (user.role === "student" && user.lastViewedEventsAt) {
+        const hasNew = sortedEvents.some(e => new Date(e.createdAt) > new Date(user.lastViewedEventsAt));
+        setHasNewEvents(hasNew);
+      }
 
       // Only fetch logs if user is an admin
       if (user.role === "collegeAdmin" || user.role === "superAdmin") {
@@ -62,30 +77,80 @@ const Dashboard = () => {
           console.error("Logs fetch failed:", logError);
           setActivities([]);
         }
-      } else {
-        // Mock activities for students until student-specific logs are implemented
-        setActivities([
-          {
-            action: "Welcome to CampusEventHub!",
-            timestamp: new Date(),
-          },
-          {
-            action: "Browse upcoming events to get started",
-            timestamp: new Date(),
-          },
-        ]);
       }
+      
+      // Fetch registrations count
+      try {
+        if (user.role === "student") {
+          const res = await axios.get("/api/v1/registrations/my-registrations");
+          setRegCount(res.data.results);
+          setRegistrations(res.data.data.registrations);
+          
+          const unread = res.data.data.registrations.filter(r => !r.isStudentRead).length;
+          setUnreadCount(unread);
+
+          // Use real activities for students too
+          const studentActivities = res.data.data.registrations.slice(0, 3).map(reg => ({
+            action: `Your registration for "${reg.eventId.title}" is ${reg.status}`,
+            timestamp: reg.createdAt,
+            status: reg.status
+          }));
+          if (studentActivities.length > 0) {
+            setActivities(studentActivities);
+          }
+        } else {
+
+          const res = await axios.get("/api/v1/registrations/admin");
+          setRegCount(res.data.results);
+          
+          // Notify admin about new pending registrations
+          const pendingCount = res.data.data.registrations.filter(r => r.status === 'pending' && !r.isRead).length;
+          if (pendingCount > 0) {
+             toast.info(`You have ${pendingCount} new pending event registrations to review.`, {
+               icon: '📩',
+               position: 'bottom-right'
+             });
+          }
+        }
+      } catch (regError) {
+        console.error("Registration fetch failed", regError);
+      }
+
     } catch (error) {
+
       console.error("Dashboard fetch error:", error);
       toast.error("Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
 
   useEffect(() => {
     if (user) {
       fetchDashboardData();
+
+      // Notify student about approved/rejected registrations
+      if (user.role === "student") {
+        const checkNotifications = async () => {
+          try {
+             const res = await axios.get("/api/v1/registrations/my-registrations");
+             const unread = res.data.data.registrations.filter(r => !r.isStudentRead);
+             unread.forEach(reg => {
+                if (reg.status !== 'pending') {
+                  toast.info(`Update: Your registration for "${reg.eventId.title}" has been ${reg.status}!`, {
+                    position: "top-right",
+                    autoClose: 5000,
+                    icon: reg.status === 'approved' ? '✅' : '❌'
+                  });
+                }
+             });
+          } catch (err) {
+             console.error("Notification check failed", err);
+          }
+        };
+        checkNotifications();
+      }
 
       // Notification for Super Admin about pending approvals
       if (user.role === "superAdmin") {
@@ -115,7 +180,8 @@ const Dashboard = () => {
         checkPendingUsers();
       }
     }
-  }, [user]);
+  }, [user, fetchDashboardData]);
+
 
   if (!user) {
     return (
@@ -155,6 +221,18 @@ const Dashboard = () => {
     return new Date(date).toLocaleDateString();
   };
 
+  const handleMarkAsRead = async (regId) => {
+    try {
+      await axios.patch(`/api/v1/registrations/${regId}/student-read`);
+      setRegistrations((prev) =>
+        prev.map((r) => (r._id === regId ? { ...r, isStudentRead: true } : r)),
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error("Failed to mark as read", error);
+    }
+  };
+
   const stats = [
     {
       title: "Total Events",
@@ -171,8 +249,8 @@ const Dashboard = () => {
       trend: { value: 2, label: "this week" },
     },
     {
-      title: "Total Registrations",
-      value: "842",
+      title: user.role === 'student' ? "My Registrations" : "Total Registrations",
+      value: regCount.toString(),
       icon: TicketIcon,
       trend: { value: 12, label: "this month" },
     },
@@ -211,91 +289,192 @@ const Dashboard = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-secondary-900">
-                Upcoming Events
-              </h2>
+            <div className="flex items-center justify-between border-b border-secondary-100 mb-6">
+              <div className="flex gap-8">
+                <button
+                  onClick={() => {
+                    setActiveTab("Upcoming");
+                    if (hasNewEvents) {
+                       setHasNewEvents(false);
+                       axios.patch('/api/v1/users/update-last-viewed-events').catch(console.error);
+                    }
+                  }}
+                  className={`pb-4 text-sm font-bold transition-all relative ${
+                    activeTab === "Upcoming"
+                      ? "text-primary-600 border-b-2 border-primary-600"
+                      : "text-secondary-400 hover:text-secondary-600"
+                  }`}
+                >
+                  Upcoming Events
+                  {hasNewEvents && (
+                    <span className="absolute top-0 -right-2 flex h-2 w-2">
+                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                       <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                    </span>
+                  )}
+                </button>
+                {user.role === "student" && (
+                  <button
+                    onClick={() => setActiveTab("Registered")}
+                    className={`pb-4 text-sm font-bold transition-all relative ${
+                      activeTab === "Registered"
+                        ? "text-primary-600 border-b-2 border-primary-600"
+                        : "text-secondary-400 hover:text-secondary-600"
+                    }`}
+                  >
+                    My Registered Events
+                    {unreadCount > 0 && (
+                      <span className="absolute top-0 -right-2 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate("/events")}
-                className="font-bold text-primary-600"
+                className="font-bold text-primary-600 pb-4"
               >
                 View All
               </Button>
             </div>
 
+
             <div className="space-y-4">
-              {loading
-                ? [1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="h-28 bg-white/50 rounded-2xl animate-pulse"
-                    />
-                  ))
-                : upcomingEvents.slice(0, 4).map((event) => (
-                    <Card
-                      key={event._id}
-                      onClick={() => handleEventClick(event)}
-                      className="p-4 flex flex-col sm:flex-row gap-5 hover:border-primary-300 transition-all cursor-pointer group shadow-sm hover:shadow-xl bg-white/80 backdrop-blur-sm"
-                    >
-                      <div className="flex-shrink-0 w-full sm:w-20 h-20 bg-primary-50 rounded-2xl flex flex-col items-center justify-center text-primary-700 group-hover:bg-primary-600 group-hover:text-white transition-all duration-300">
-                        <span className="text-[10px] font-black uppercase tracking-widest opacity-80">
-                          {new Date(event.startDate).toLocaleDateString(
-                            "en-US",
-                            { month: "short" },
-                          )}
-                        </span>
-                        <span className="text-2xl font-black leading-none mt-1">
-                          {new Date(event.startDate).getDate()}
-                        </span>
-                      </div>
+              {loading ? (
+                [1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="h-28 bg-white/50 rounded-2xl animate-pulse"
+                  />
+                ))
+              ) : activeTab === "Upcoming" ? (
+                upcomingEvents.slice(0, 4).map((event) => (
+                  <Card
+                    key={event._id}
+                    onClick={() => handleEventClick(event)}
+                    className="p-4 flex flex-col sm:flex-row gap-5 hover:border-primary-300 transition-all cursor-pointer group shadow-sm hover:shadow-xl bg-white/80 backdrop-blur-sm"
+                  >
+                    {/* Event Card Content (Existing) */}
+                    <div className="flex-shrink-0 w-full sm:w-20 h-20 bg-primary-50 rounded-2xl flex flex-col items-center justify-center text-primary-700 group-hover:bg-primary-600 group-hover:text-white transition-all duration-300">
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-80">
+                        {new Date(event.startDate).toLocaleDateString("en-US", {
+                          month: "short",
+                        })}
+                      </span>
+                      <span className="text-2xl font-black leading-none mt-1">
+                        {new Date(event.startDate).getDate()}
+                      </span>
+                    </div>
 
-                      <div className="flex-grow py-1">
-                        <div className="flex items-start justify-between mb-1.5">
-                          <span
-                            className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${getCategoryColor(event.category)} shadow-sm`}
-                          >
-                            {event.category}
-                          </span>
-                          <div className="flex gap-2">
-                            {new Date() > new Date(event.endDate) && (
-                              <div className="flex items-center gap-1.5 bg-red-50 text-red-600 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter border border-red-100">
-                                Completed
-                              </div>
-                            )}
-                            <div className="flex items-center gap-1.5 bg-success/10 text-success px-2 py-0.5 rounded-full text-[10px] font-black">
-                              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
-                              FREE
+                    <div className="flex-grow py-1">
+                      <div className="flex items-start justify-between mb-1.5">
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${getCategoryColor(
+                            event.category,
+                          )} shadow-sm`}
+                        >
+                          {event.category}
+                        </span>
+                        <div className="flex gap-2">
+                          {new Date() > new Date(event.endDate) && (
+                            <div className="flex items-center gap-1.5 bg-red-50 text-red-600 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter border border-red-100">
+                              Completed
                             </div>
-                          </div>
-                        </div>
-                        <h3 className="text-xl font-bold text-secondary-900 group-hover:text-primary-600 transition-colors">
-                          {event.title}
-                        </h3>
-                        <div className="flex items-center text-xs text-secondary-500 gap-5 mt-2 font-medium">
-                          <div className="flex items-center gap-1.5">
-                            <ClockIcon className="w-4 h-4 text-primary-500" />
-                            {new Date(event.startDate).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <MapPinIcon className="w-4 h-4 text-primary-500" />
-                            {event.location}
+                          )}
+                          <div className="flex items-center gap-1.5 bg-success/10 text-success px-2 py-0.5 rounded-full text-[10px] font-black">
+                            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
+                            FREE
                           </div>
                         </div>
                       </div>
+                      <h3 className="text-xl font-bold text-secondary-900 group-hover:text-primary-600 transition-colors">
+                        {event.title}
+                      </h3>
+                      <div className="flex items-center text-xs text-secondary-500 gap-5 mt-2 font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <ClockIcon className="w-4 h-4 text-primary-500" />
+                          {new Date(event.startDate).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <MapPinIcon className="w-4 h-4 text-primary-500" />
+                          {event.location}
+                        </div>
+                      </div>
+                    </div>
 
-                      <div className="flex-shrink-0 flex items-center pr-2">
-                        <div className="w-10 h-10 rounded-full border border-secondary-100 flex items-center justify-center group-hover:bg-primary-50 group-hover:border-primary-200 transition-all">
-                          <CalendarIcon className="w-5 h-5 text-secondary-400 group-hover:text-primary-600" />
-                        </div>
+                    <div className="flex-shrink-0 flex items-center pr-2">
+                      <div className="w-10 h-10 rounded-full border border-secondary-100 flex items-center justify-center group-hover:bg-primary-50 group-hover:border-primary-200 transition-all">
+                        <CalendarIcon className="w-5 h-5 text-secondary-400 group-hover:text-primary-600" />
                       </div>
-                    </Card>
-                  ))}
+                    </div>
+                  </Card>
+                ))
+              ) : (
+                registrations.map((reg) => (
+                  <Card
+                    key={reg._id}
+                    onMouseEnter={() => !reg.isStudentRead && handleMarkAsRead(reg._id)}
+                    className={`p-5 hover:border-primary-300 transition-all shadow-sm bg-white/80 backdrop-blur-sm relative overflow-hidden ${!reg.isStudentRead ? 'border-l-4 border-l-primary-500' : ''}`}
+                  >
+                    {!reg.isStudentRead && (
+                       <div className="absolute top-0 right-0">
+                         <div className="bg-primary-500 text-white text-[8px] font-bold px-2 py-0.5 rounded-bl-lg">NEW UPDATE</div>
+                       </div>
+                    )}
+                    <div className="flex flex-col sm:flex-row gap-5">
+                       <div className="flex-shrink-0 w-full sm:w-16 h-16 bg-secondary-50 rounded-xl flex items-center justify-center overflow-hidden">
+                          {reg.eventId.image ? (
+                            <img src={reg.eventId.image} alt={reg.eventId.title} className="w-full h-full object-cover" />
+                          ) : (
+                            <TicketIcon className="w-8 h-8 text-secondary-300" />
+                          )}
+                       </div>
+                       <div className="flex-grow">
+                          <div className="flex items-start justify-between mb-1">
+                             <h3 className="font-bold text-secondary-900">{reg.eventId.title}</h3>
+                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm 
+                                ${reg.status === 'approved' ? 'bg-green-100 text-green-700' : 
+                                  reg.status === 'rejected' ? 'bg-red-100 text-red-700' : 
+                                  'bg-orange-100 text-orange-700'}`}
+                             >
+                               {reg.status}
+                             </span>
+                          </div>
+                          <div className="flex items-center text-[10px] font-bold text-secondary-500 gap-4 mt-1">
+                             <div className="flex items-center gap-1">
+                                <ClockIcon className="w-3.5 h-3.5 text-primary-500" />
+                                {new Date(reg.eventId.startDate).toLocaleDateString()}
+                             </div>
+                             <div className="flex items-center gap-1">
+                                <MapPinIcon className="w-3.5 h-3.5 text-primary-500" />
+                                {reg.eventId.location}
+                             </div>
+                          </div>
+                          <p className="text-[10px] text-secondary-400 mt-2">
+                             Organized by: <span className="text-secondary-600">{reg.adminId.college}</span>
+                          </p>
+                       </div>
+                    </div>
+                  </Card>
+                ))
+              )}
+
+              {!loading && activeTab === "Registered" && registrations.length === 0 && (
+                 <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-secondary-200">
+                   <TicketIcon className="w-12 h-12 text-secondary-200 mx-auto mb-3" />
+                   <p className="text-secondary-500 font-medium">You haven't registered for any events yet.</p>
+                   <Button variant="ghost" className="mt-2 text-primary-600" onClick={() => navigate("/events")}>Explore Events</Button>
+                 </div>
+              )}
             </div>
+
           </div>
 
           <div className="space-y-6">

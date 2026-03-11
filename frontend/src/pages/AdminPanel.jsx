@@ -26,6 +26,7 @@ import { toast } from "react-toastify";
 const AdminPanel = () => {
   const { user, loading: authLoading } = useContext(AuthContext);
   const navigate = useNavigate();
+
   const [activeTab, setActiveTab] = useState("Overview");
   const [usersData, setUsersData] = useState([]);
   const [eventsData, setEventsData] = useState([]);
@@ -48,6 +49,16 @@ const AdminPanel = () => {
   const [eventsTotal, setEventsTotal] = useState(1);
   const [logsPage, setLogsPage] = useState(1);
   const [logsTotal, setLogsTotal] = useState(1);
+  const [registrationsData, setRegistrationsData] = useState([]);
+  const [registrationsPage, setRegistrationsPage] = useState(1);
+  const [registrationsTotal, setRegistrationsTotal] = useState(1);
+  const [pendingRegistrationsCount, setPendingRegistrationsCount] = useState(0);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/login");
+    }
+  }, [user, authLoading, navigate]);
 
   const fetchAdminData = async () => {
     if (!user) return;
@@ -60,6 +71,7 @@ const AdminPanel = () => {
         recentLogsRes,
         studentsRes,
         pendingRes,
+        regsRes,
       ] = await Promise.all([
         axios.get(`/api/v1/users?page=${usersPage}&limit=10`),
         axios.get(`/api/v1/events?page=${eventsPage}&limit=10&sort=-createdAt`),
@@ -67,6 +79,9 @@ const AdminPanel = () => {
         axios.get(`/api/v1/logs?limit=5`),
         axios.get(`/api/v1/users?role=student&limit=1`),
         axios.get(`/api/v1/users?status=pending&limit=1`),
+        axios.get(
+          `/api/v1/registrations/admin?page=${registrationsPage}&limit=10`,
+        ),
       ]);
       setUsersData(usersRes.data.data.users);
       setUsersTotal(Math.ceil(usersRes.data.totalResults / 10));
@@ -83,6 +98,13 @@ const AdminPanel = () => {
       if (user.role === "superAdmin") {
         setPendingUsersCount(pendingRes.data.totalResults);
       }
+
+      setRegistrationsData(regsRes.data.data.registrations);
+      setRegistrationsTotal(Math.ceil(regsRes.data.totalResults / 10));
+      setPendingRegistrationsCount(
+        regsRes.data.data.registrations.filter((r) => r.status === "pending")
+          .length,
+      );
     } catch (error) {
       toast.error("Failed to load admin data");
     } finally {
@@ -122,6 +144,34 @@ const AdminPanel = () => {
     }
   };
 
+  const handleUpdateRegistrationStatus = async (regId, newStatus) => {
+    try {
+      await axios.patch(`/api/v1/registrations/${regId}/status`, {
+        status: newStatus,
+      });
+      toast.success(`Registration ${newStatus} successfully`);
+      fetchAdminData();
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "Failed to update registration",
+      );
+    }
+  };
+
+  const handleDeleteRegistration = async (regId) => {
+    if (!window.confirm("Are you sure you want to delete this registration?"))
+      return;
+    try {
+      await axios.delete(`/api/v1/registrations/${regId}`);
+      toast.success("Registration deleted successfully");
+      fetchAdminData();
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || "Failed to delete registration",
+      );
+    }
+  };
+
   useEffect(() => {
     if (authLoading) return;
 
@@ -157,6 +207,16 @@ const AdminPanel = () => {
             );
             setLogsData(res.data.data.logs);
             setLogsTotal(Math.ceil(res.data.totalResults / 10));
+          } else if (activeTab === "Registrations") {
+            const res = await axios.get(
+              `/api/v1/registrations/admin?page=${registrationsPage}&limit=10`,
+            );
+            setRegistrationsData(res.data.data.registrations);
+            setRegistrationsTotal(Math.ceil(res.data.totalResults / 10));
+            setPendingRegistrationsCount(
+              res.data.data.registrations.filter((r) => r.status === "pending")
+                .length,
+            );
           }
           // Always refresh recent logs and global states
           const [rLogRes, sRes, pRes] = await Promise.all([
@@ -176,7 +236,15 @@ const AdminPanel = () => {
       refreshCurrentTab();
     }, 5000);
     return () => clearInterval(interval);
-  }, [activeTab, usersPage, eventsPage, logsPage]);
+  }, [activeTab, usersPage, eventsPage, logsPage, registrationsPage]);
+
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-secondary-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
 
   const stats = [
     {
@@ -685,6 +753,166 @@ const AdminPanel = () => {
             </div>
           </div>
         );
+      case "Registrations":
+        return (
+          <div className="space-y-6">
+            <div className="overflow-x-auto rounded-[2.5rem] border border-secondary-100 shadow-xl bg-white overflow-hidden">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-secondary-50/50 text-[10px] font-black text-secondary-400 uppercase tracking-[0.2em]">
+                  <tr>
+                    <th className="px-8 py-6 border-b border-secondary-100">
+                      Student Details
+                    </th>
+                    <th className="px-8 py-6 border-b border-secondary-100">
+                      Event Details
+                    </th>
+                    <th className="px-8 py-6 border-b border-secondary-100">
+                      Status
+                    </th>
+                    <th className="px-8 py-6 border-b border-secondary-100">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-secondary-50">
+                  {registrationsData.map((reg) => (
+                    <tr
+                      key={reg._id}
+                      className="hover:bg-secondary-50/30 transition-colors group"
+                    >
+                      <td className="px-8 py-6">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-primary-50 flex items-center justify-center text-primary-700 font-black text-xs border border-primary-100">
+                            {reg.studentId?.name.charAt(0)}
+                          </div>
+                          <div>
+                            <div className="font-black text-sm text-secondary-900 uppercase">
+                              {reg.studentId?.name}
+                            </div>
+                            <div className="text-[10px] text-secondary-400 font-bold tracking-wider lowercase opacity-70 italic">
+                              {reg.studentId?.email}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="font-black text-xs text-secondary-900 uppercase">
+                          {reg.eventId?.title}
+                        </div>
+                        <div className="text-[9px] text-primary-500 font-black uppercase tracking-widest mt-1">
+                          {new Date(reg.eventId?.startDate).toLocaleDateString(
+                            "en-US",
+                            { month: "short", day: "numeric" },
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <span
+                          className={`inline-flex items-center gap-2 font-black text-[10px] uppercase tracking-widest ${
+                            reg.status === "approved"
+                              ? "text-success"
+                              : reg.status === "pending"
+                                ? "text-orange-500"
+                                : "text-red-500"
+                          }`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              reg.status === "approved"
+                                ? "bg-success"
+                                : reg.status === "pending"
+                                  ? "bg-orange-500 animate-pulse"
+                                  : "bg-red-500"
+                            }`}
+                          ></span>
+                          {reg.status}
+                        </span>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex items-center gap-2">
+                          {reg.status === "pending" &&
+                            user.role === "collegeAdmin" && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleUpdateRegistrationStatus(
+                                      reg._id,
+                                      "approved",
+                                    )
+                                  }
+                                  className="p-2 text-success hover:bg-success/10 rounded-xl"
+                                  title="Approve"
+                                >
+                                  <CheckIcon className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleUpdateRegistrationStatus(
+                                      reg._id,
+                                      "rejected",
+                                    )
+                                  }
+                                  className="p-2 text-red-500 hover:bg-red-50 rounded-xl"
+                                  title="Reject"
+                                >
+                                  <XMarkIcon className="w-4 h-4" />
+                                </Button>
+                              </>
+                            )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteRegistration(reg._id)}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-xl"
+                            title="Delete"
+                          >
+                            <TrashIcon className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Registration Pagination */}
+            <div className="flex justify-between items-center px-4">
+              <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">
+                Page {registrationsPage} of {registrationsTotal}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setRegistrationsPage((p) => Math.max(1, p - 1))
+                  }
+                  disabled={registrationsPage === 1}
+                  className="rounded-xl font-bold text-[10px] uppercase"
+                >
+                  Prev
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setRegistrationsPage((p) =>
+                      Math.min(registrationsTotal, p + 1),
+                    )
+                  }
+                  disabled={registrationsPage === registrationsTotal}
+                  className="rounded-xl font-bold text-[10px] uppercase"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
       case "Admin Logs":
         return (
           <div className="space-y-6">
@@ -823,12 +1051,19 @@ const AdminPanel = () => {
         <Card className="rounded-[3rem] border-secondary-100 shadow-2xl overflow-hidden bg-white">
           <div className="border-b border-secondary-100 bg-secondary-50/30">
             <nav className="flex space-x-12 px-10" aria-label="Tabs">
-              {["Overview", "User Management", "Event Management", "Admin Logs"]
+              {[
+                "Overview",
+                "User Management",
+                "Event Management",
+                "Registrations",
+                "Admin Logs",
+              ]
                 .filter((tab) => {
                   if (tab === "User Management")
-                    return user.role === "superAdmin";
+                    return user?.role === "superAdmin";
                   return true;
                 })
+
                 .map((tab) => (
                   <button
                     key={tab}
@@ -849,6 +1084,13 @@ const AdminPanel = () => {
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                       </span>
                     )}
+                    {tab === "Registrations" &&
+                      pendingRegistrationsCount > 0 && (
+                        <span className="absolute top-4 -right-1 flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                        </span>
+                      )}
                   </button>
                 ))}
             </nav>

@@ -19,11 +19,15 @@ const registrationSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],
-    default: 'approved',
+    default: 'pending',
   },
   isRead: {
     type: Boolean,
     default: false,
+  },
+  isStudentRead: {
+    type: Boolean,
+    default: true, // true by default because on creation, student knows they registered
   },
   createdAt: {
     type: Date,

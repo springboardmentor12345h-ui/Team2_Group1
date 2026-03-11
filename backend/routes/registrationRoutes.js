@@ -15,7 +15,24 @@ router
   .get(userController.restrictTo('collegeAdmin', 'superAdmin'), registrationController.getAdminRegistrations);
 
 router
+  .route('/my-registrations')
+  .get(userController.restrictTo('student'), registrationController.getStudentRegistrations);
+
+router
+  .route('/:id/status')
+  .patch(userController.restrictTo('collegeAdmin', 'superAdmin'), registrationController.updateRegistrationStatus);
+
+router
   .route('/:id/read')
   .patch(userController.restrictTo('collegeAdmin', 'superAdmin'), registrationController.markAsRead);
+
+router
+  .route('/:id/student-read')
+  .patch(userController.restrictTo('student'), registrationController.markRegistrationAsReadByStudent);
+
+router
+  .route('/:id')
+  .delete(userController.restrictTo('collegeAdmin', 'superAdmin'), registrationController.deleteRegistration);
+
 
 module.exports = router;
