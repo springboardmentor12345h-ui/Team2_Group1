@@ -36,6 +36,7 @@ const AdminPanel = () => {
   const [apiLatency, setApiLatency] = useState(150);
   const [editingEvent, setEditingEvent] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [exportingId, setExportingId] = useState(null);
 
   // Global Stat states
   const [totalStudents, setTotalStudents] = useState(0);
@@ -169,6 +170,44 @@ const AdminPanel = () => {
       toast.error(
         error.response?.data?.message || "Failed to delete registration",
       );
+    }
+  };
+
+  const handleExportCSV = async (eventId, eventTitle) => {
+    setExportingId(eventId);
+    try {
+      const response = await axios.get(
+        `/api/v1/events/${eventId}/export-participants`,
+        {
+          responseType: "blob",      // IMPORTANT: must be blob for file download
+          withCredentials: true,     // remove if you use Authorization headers
+        }
+      );
+
+      // Create a temporary download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute(
+        "download",
+        `${eventTitle.replace(/\s+/g, "_")}_participants.csv`
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+    } catch (err) {
+      const status = err.response?.status;
+      if (status === 404) {
+        alert("No participants have registered for this event yet.");
+      } else if (status === 403) {
+        alert("You are not authorized to export this event's participants.");
+      } else {
+        alert("Export failed. Please try again.");
+      }
+    } finally {
+      setExportingId(null);
     }
   };
 
@@ -695,6 +734,13 @@ const AdminPanel = () => {
                           {(user.role === "superAdmin" ||
                             e.collegeId?._id === user._id) && (
                             <>
+                              <button
+                                onClick={() => handleExportCSV(e._id, e.title)}
+                                disabled={exportingId === e._id}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-semibold rounded-lg transition-colors duration-200"
+                              >
+                                {exportingId === e._id ? "Exporting..." : "⬇ Export CSV"}
+                              </button>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -702,7 +748,7 @@ const AdminPanel = () => {
                                   setEditingEvent(e);
                                   setIsEditModalOpen(true);
                                 }}
-                                className="p-2 border border-secondary-100 rounded-xl hover:bg-primary-50 text-primary-600 transition-all"
+                                className="p-2 border border-secondary-100 rounded-xl hover:bg-primary-50 text-primary-600 transition-all ml-2"
                               >
                                 <PencilSquareIcon className="w-4 h-4" />
                               </Button>

@@ -1,5 +1,7 @@
 const Event = require('../models/eventModel');
 const AdminLog = require('../models/adminLogModel');
+const Registration = require('../models/registrationModel');
+const { Parser } = require('json2csv');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -275,4 +277,55 @@ exports.deleteEvent = catchAsync(async (req, res, next) => {
     status: 'success',
     data: null,
   });
+});
+
+exports.exportParticipantsCSV = catchAsync(async (req, res, next) => {
+  const { id: eventId } = req.params;
+
+  // 1. Verify the event exists
+  const event = await Event.findById(eventId);
+  if (!event) {
+    return next(new AppError('No event found with that ID', 404));
+  }
+
+  // 2. Check authorization
+  if (
+    req.user.role !== 'superAdmin' &&
+    event.collegeId.toString() !== req.user.id
+  ) {
+    return next(new AppError("You are not authorized to export this event's participants.", 403));
+  }
+
+  // 3. Fetch all registrations for this event
+  const registrations = await Registration.find({ eventId })
+    .populate('studentId', 'name email college');
+
+  if (!registrations || registrations.length === 0) {
+    return next(new AppError('No participants found for this event.', 404));
+  }
+
+  // 4. Map registrations to CSV rows
+  const rows = registrations.map(reg => ({
+    "Student Name": reg.studentId?.name || "N/A",
+    "Email": reg.studentId?.email || "N/A",
+    "College": reg.studentId?.college || "N/A",
+    "Status": reg.status || "N/A",
+    "Registered At": new Date(reg.createdAt).toLocaleString()
+  }));
+
+  // 5. Convert to CSV using json2csv
+  const fields = [
+    "Student Name", "Email", "College",
+    "Status", "Registered At"
+  ];
+  const parser = new Parser({ fields });
+  const csv = parser.parse(rows);
+
+  // 6. Set response headers and send CSV
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="participants-${eventId}.csv"`
+  );
+  res.status(200).end(csv);
 });
