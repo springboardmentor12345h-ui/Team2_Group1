@@ -31,6 +31,22 @@ router
   .patch(userController.restrictTo('student'), registrationController.markRegistrationAsReadByStudent);
 
 router
+  .route('/verify-attendance')
+  .post(userController.restrictTo('collegeAdmin', 'superAdmin'), registrationController.verifyAttendance);
+
+router
+  .route('/:id/issue-certificate')
+  .post(userController.restrictTo('collegeAdmin', 'superAdmin'), registrationController.issueCertificate);
+
+router
+  .route('/:id/download-admit-card')
+  .get(userController.restrictTo('student', 'collegeAdmin', 'superAdmin'), registrationController.downloadAdmitCard);
+
+router
+  .route('/:id/download-certificate')
+  .get(userController.restrictTo('student', 'superAdmin'), registrationController.downloadCertificate);
+
+router
   .route('/:id')
   .delete(userController.restrictTo('collegeAdmin', 'superAdmin'), registrationController.deleteRegistration);
 

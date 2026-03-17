@@ -12,6 +12,11 @@ import {
   TrashIcon,
   CheckIcon,
   XMarkIcon,
+  DocumentArrowDownIcon,
+  ChevronDownIcon,
+  QrCodeIcon,
+  AcademicCapIcon,
+  ArrowDownTrayIcon,
 } from "@heroicons/react/24/outline";
 import EditEventModal from "../components/EditEventModal";
 import axios from "axios";
@@ -54,6 +59,9 @@ const AdminPanel = () => {
   const [registrationsPage, setRegistrationsPage] = useState(1);
   const [registrationsTotal, setRegistrationsTotal] = useState(1);
   const [pendingRegistrationsCount, setPendingRegistrationsCount] = useState(0);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [issuingCertId, setIssuingCertId] = useState(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -61,7 +69,7 @@ const AdminPanel = () => {
     }
   }, [user, authLoading, navigate]);
 
-  const fetchAdminData = async () => {
+  const fetchAdminData = React.useCallback(async () => {
     if (!user) return;
     setLoading(true);
     try {
@@ -106,12 +114,13 @@ const AdminPanel = () => {
         regsRes.data.data.registrations.filter((r) => r.status === "pending")
           .length,
       );
-    } catch (error) {
+    } catch (err) {
+      console.error(err);
       toast.error("Failed to load admin data");
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, usersPage, eventsPage, logsPage, registrationsPage]);
 
   const handleUpdateUserStatus = async (userId, newStatus) => {
     try {
@@ -159,6 +168,36 @@ const AdminPanel = () => {
     }
   };
 
+  const handleVerifyAttendance = async () => {
+    if (!verificationCode) return toast.error("Please enter a verification code");
+    setIsVerifying(true);
+    try {
+      await axios.post("/api/v1/registrations/verify-attendance", {
+        admitCardCode: verificationCode,
+      });
+      toast.success("Attendance marked successfully!");
+      setVerificationCode("");
+      fetchAdminData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Verification failed");
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleIssueCertificate = async (regId) => {
+    setIssuingCertId(regId);
+    try {
+      await axios.post(`/api/v1/registrations/${regId}/issue-certificate`);
+      toast.success("Certificate issued and sent to student!");
+      fetchAdminData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to issue certificate");
+    } finally {
+      setIssuingCertId(null);
+    }
+  };
+
   const handleDeleteRegistration = async (regId) => {
     if (!window.confirm("Are you sure you want to delete this registration?"))
       return;
@@ -173,39 +212,37 @@ const AdminPanel = () => {
     }
   };
 
-  const handleExportCSV = async (eventId, eventTitle) => {
-    setExportingId(eventId);
+  const handleExport = async (eventId, eventTitle, format = 'csv') => {
+    setExportingId(`${eventId}-${format}`);
     try {
       const response = await axios.get(
-        `/api/v1/events/${eventId}/export-participants`,
+        `/api/v1/events/${eventId}/export-participants?format=${format}`,
         {
-          responseType: "blob",      // IMPORTANT: must be blob for file download
-          withCredentials: true,     // remove if you use Authorization headers
+          responseType: "blob",
+          withCredentials: true,
         }
       );
 
-      // Create a temporary download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
+      
+      let extension = 'csv';
+      if (format === 'xlsx') extension = 'xlsx';
+      if (format === 'pdf') extension = 'pdf';
+
       link.setAttribute(
         "download",
-        `${eventTitle.replace(/\s+/g, "_")}_participants.csv`
+        `${eventTitle.replace(/\s+/g, "_")}_participants.${extension}`
       );
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-
+      toast.success(`Exported as ${format.toUpperCase()}`);
     } catch (err) {
-      const status = err.response?.status;
-      if (status === 404) {
-        alert("No participants have registered for this event yet.");
-      } else if (status === 403) {
-        alert("You are not authorized to export this event's participants.");
-      } else {
-        alert("Export failed. Please try again.");
-      }
+      console.error(err);
+      toast.error("Export failed. Please try again.");
     } finally {
       setExportingId(null);
     }
@@ -275,7 +312,7 @@ const AdminPanel = () => {
       refreshCurrentTab();
     }, 5000);
     return () => clearInterval(interval);
-  }, [activeTab, usersPage, eventsPage, logsPage, registrationsPage]);
+  }, [activeTab, usersPage, eventsPage, logsPage, registrationsPage, authLoading, fetchAdminData, navigate, user]);
 
   if (authLoading || !user) {
     return (
@@ -660,8 +697,9 @@ const AdminPanel = () => {
       case "Event Management":
         return (
           <div className="space-y-6">
-            <div className="overflow-x-auto rounded-[2.5rem] border border-secondary-100 shadow-xl bg-white overflow-hidden">
-              <table className="w-full text-left border-collapse">
+            <div className="rounded-[2.5rem] border border-secondary-100 shadow-xl bg-white overflow-visible">
+              <div className="overflow-x-auto rounded-[2.5rem]">
+                <table className="w-full text-left border-collapse min-h-[150px]">
                 <thead className="bg-secondary-50/50 text-[10px] font-black text-secondary-400 uppercase tracking-[0.2em]">
                   <tr>
                     <th className="px-8 py-6 border-b border-secondary-100">
@@ -734,13 +772,44 @@ const AdminPanel = () => {
                           {(user.role === "superAdmin" ||
                             e.collegeId?._id === user._id) && (
                             <>
-                              <button
-                                onClick={() => handleExportCSV(e._id, e.title)}
-                                disabled={exportingId === e._id}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white text-sm font-semibold rounded-lg transition-colors duration-200"
-                              >
-                                {exportingId === e._id ? "Exporting..." : "⬇ Export CSV"}
-                              </button>
+                          <div className="relative group/export">
+                                <button
+                                  className="flex items-center gap-2 px-3 py-1.5 bg-secondary-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md group-hover/export:shadow-lg"
+                                >
+                                  <DocumentArrowDownIcon className="w-4 h-4" />
+                                  Export
+                                  <ChevronDownIcon className="w-3 h-3 ml-1" />
+                                </button>
+                                
+                                <div className="absolute right-0 top-full pt-1 invisible opacity-0 group-hover/export:visible group-hover/export:opacity-100 z-[100] transition-all duration-200">
+                                  <div className="w-32 bg-white rounded-2xl shadow-2xl border border-secondary-100 py-2 animate-in fade-in slide-in-from-top-2">
+                                    <button
+                                      onClick={() => handleExport(e._id, e.title, 'csv')}
+                                      disabled={exportingId === `${e._id}-csv`}
+                                      className="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest text-secondary-600 hover:bg-secondary-50 hover:text-primary-600 transition-colors flex items-center gap-2 disabled:opacity-50"
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                      {exportingId === `${e._id}-csv` ? "..." : "CSV"}
+                                    </button>
+                                    <button
+                                      onClick={() => handleExport(e._id, e.title, 'xlsx')}
+                                      disabled={exportingId === `${e._id}-xlsx`}
+                                      className="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest text-secondary-600 hover:bg-secondary-50 hover:text-green-600 transition-colors flex items-center gap-2 disabled:opacity-50"
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                      {exportingId === `${e._id}-xlsx` ? "..." : "Excel"}
+                                    </button>
+                                    <button
+                                      onClick={() => handleExport(e._id, e.title, 'pdf')}
+                                      disabled={exportingId === `${e._id}-pdf`}
+                                      className="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest text-secondary-600 hover:bg-secondary-50 hover:text-red-600 transition-colors flex items-center gap-2 disabled:opacity-50"
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                      {exportingId === `${e._id}-pdf` ? "..." : "PDF"}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -769,6 +838,7 @@ const AdminPanel = () => {
                 </tbody>
               </table>
             </div>
+          </div>
             {/* Event Pagination */}
             <div className="flex justify-between items-center px-4">
               <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">
@@ -802,6 +872,40 @@ const AdminPanel = () => {
       case "Registrations":
         return (
           <div className="space-y-6">
+            <div className="bg-white p-8 rounded-[2.5rem] border border-secondary-100 shadow-xl">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div>
+                  <h3 className="text-xl font-black text-secondary-900 uppercase tracking-tight">
+                    Attendance Scanner
+                  </h3>
+                  <p className="text-secondary-400 text-[10px] font-bold uppercase tracking-widest mt-1 italic">
+                    Enter the unique 6-digit code from student's admit card
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative">
+                    <QrCodeIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                    <input
+                      type="text"
+                      placeholder="ENTER CODE (E.G. AB12CD)"
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value.toUpperCase())}
+                      className="pl-11 pr-4 py-3 bg-secondary-50 border border-secondary-100 rounded-2xl text-xs font-black uppercase tracking-widest focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all w-full md:w-64"
+                      maxLength={6}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleVerifyAttendance}
+                    disabled={isVerifying || verificationCode.length !== 6}
+                    variant="primary"
+                    className="rounded-2xl px-6 shadow-lg shadow-primary-500/20"
+                  >
+                    {isVerifying ? "..." : "Verify"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             <div className="overflow-x-auto rounded-[2.5rem] border border-secondary-100 shadow-xl bg-white overflow-hidden">
               <table className="w-full text-left border-collapse">
                 <thead className="bg-secondary-50/50 text-[10px] font-black text-secondary-400 uppercase tracking-[0.2em]">
@@ -814,6 +918,9 @@ const AdminPanel = () => {
                     </th>
                     <th className="px-8 py-6 border-b border-secondary-100">
                       Status
+                    </th>
+                    <th className="px-8 py-6 border-b border-secondary-100">
+                      Attendance
                     </th>
                     <th className="px-8 py-6 border-b border-secondary-100">
                       Actions
@@ -875,6 +982,24 @@ const AdminPanel = () => {
                         </span>
                       </td>
                       <td className="px-8 py-6">
+                        <span
+                          className={`inline-flex items-center gap-2 font-black text-[10px] uppercase tracking-widest ${
+                            reg.attendanceStatus === "present"
+                              ? "text-success"
+                              : "text-secondary-400"
+                          }`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              reg.attendanceStatus === "present"
+                                ? "bg-success"
+                                : "bg-secondary-200"
+                            }`}
+                          ></span>
+                          {reg.attendanceStatus}
+                        </span>
+                      </td>
+                      <td className="px-8 py-6">
                         <div className="flex items-center gap-2">
                           {reg.status === "pending" &&
                             user.role === "collegeAdmin" && (
@@ -909,6 +1034,22 @@ const AdminPanel = () => {
                                 </Button>
                               </>
                             )}
+                          {reg.attendanceStatus === "present" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleIssueCertificate(reg._id)}
+                              disabled={reg.isCertificateIssued || issuingCertId === reg._id}
+                              className={`p-2 rounded-xl ${
+                                reg.isCertificateIssued
+                                  ? "text-blue-400"
+                                  : "text-blue-600 hover:bg-blue-50"
+                              }`}
+                              title={reg.isCertificateIssued ? "Certificate Issued" : "Issue Certificate"}
+                            >
+                              <AcademicCapIcon className={`w-4 h-4 ${issuingCertId === reg._id ? 'animate-bounce' : ''}`} />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"

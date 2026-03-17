@@ -50,19 +50,23 @@ const sendEmail = async (options) => {
     console.log(`📤 Attempting to send email via ${isRealEmailConfigured ? 'Real SMTP' : 'Ethereal Test Account'}...`);
     const info = await transporter.sendMail(mailOptions);
     
-    // If using Ethereal, log the preview URL
-    if (!isRealEmailConfigured) {
+    // If using Ethereal, log the preview URL prominently
+    if (!isRealEmailConfigured && info) {
       const previewUrl = nodemailer.getTestMessageUrl(info);
-      console.log('✅ Test Email sent successfully!');
-      console.log('\n----------------------------------------');
-      console.log('📥 PREVIEW YOUR EMAIL AT:');
-      console.log(previewUrl);
-      console.log('----------------------------------------\n');
+      console.log('\n' + '⭐'.repeat(30));
+      console.log('📬 [ETHEREAL EMAIL PREVIEW]');
+      console.log(`🔗 URL: ${previewUrl}`);
+      console.log('⭐'.repeat(30) + '\n');
+      
+      // Also attach it to the return object for the controller to use
+      return { ...info, previewUrl };
     } else {
       console.log('✅ Real email delivered successfully!');
+      return { ...info, previewUrl: null };
     }
   } catch (err) {
     console.error('❌ Email sending failed. Error Details:', err.message);
+    throw err;
   }
 };
 

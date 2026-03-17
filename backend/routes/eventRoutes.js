@@ -33,7 +33,7 @@ router.get(
   '/:id/export-participants',
   userController.protect,
   userController.restrictTo('collegeAdmin', 'superAdmin'),
-  eventController.exportParticipantsCSV
+  eventController.exportParticipants
 );
 
 module.exports = router;

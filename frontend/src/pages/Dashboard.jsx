@@ -1,4 +1,4 @@
-import { useContext, useState, useEffect, useCallback } from "react";
+import { useContext, useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CalendarIcon,
@@ -9,6 +9,9 @@ import {
   TicketIcon,
   ChartBarIcon,
   ClipboardDocumentCheckIcon,
+  ArrowDownTrayIcon,
+  AcademicCapIcon,
+  CheckCircleIcon,
 } from "@heroicons/react/24/outline";
 import axios from "axios";
 import AuthContext from "../context/AuthContext";
@@ -30,9 +33,7 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState("Upcoming");
   const [unreadCount, setUnreadCount] = useState(0);
   const [hasNewEvents, setHasNewEvents] = useState(false);
-
-
-
+  const notifiedRegs = useRef(new Set());
 
   // Modal State
   const [selectedEvent, setSelectedEvent] = useState(null);
@@ -59,12 +60,13 @@ const Dashboard = () => {
         }
       });
 
-
       setUpcomingEvents(sortedEvents);
 
       // Check for new events since last viewed
       if (user.role === "student" && user.lastViewedEventsAt) {
-        const hasNew = sortedEvents.some(e => new Date(e.createdAt) > new Date(user.lastViewedEventsAt));
+        const hasNew = sortedEvents.some(
+          (e) => new Date(e.createdAt) > new Date(user.lastViewedEventsAt),
+        );
         setHasNewEvents(hasNew);
       }
 
@@ -78,46 +80,84 @@ const Dashboard = () => {
           setActivities([]);
         }
       }
-      
+
       // Fetch registrations count
       try {
         if (user.role === "student") {
           const res = await axios.get("/api/v1/registrations/my-registrations");
           setRegCount(res.data.results);
           setRegistrations(res.data.data.registrations);
-          
-          const unread = res.data.data.registrations.filter(r => !r.isStudentRead).length;
+
+          const unread = res.data.data.registrations.filter(
+            (r) => !r.isStudentRead,
+          ).length;
           setUnreadCount(unread);
 
+          // Handle notifications for students once
+          const unreadRegs = res.data.data.registrations.filter(
+            (r) => !r.isStudentRead,
+          );
+          unreadRegs.forEach((reg) => {
+            if (!notifiedRegs.current.has(reg._id)) {
+              if (reg.isCertificateIssued) {
+                toast.success(
+                  `Congratulations! Your certificate for "${reg.eventId?.title || "Event"}" has been issued!`,
+                  {
+                    position: "top-right",
+                    autoClose: 6000,
+                    icon: "🎓",
+                  },
+                );
+              } else if (reg.status !== "pending") {
+                toast.info(
+                  `Update: Your registration for "${reg.eventId?.title || "Event"}" has been ${reg.status}!`,
+                  {
+                    position: "top-right",
+                    autoClose: 5000,
+                    icon: reg.status === "approved" ? "✅" : "❌",
+                  },
+                );
+              }
+              notifiedRegs.current.add(reg._id);
+            }
+          });
+
           // Use real activities for students too
-          const studentActivities = res.data.data.registrations.slice(0, 3).map(reg => ({
-            action: `Your registration for "${reg.eventId.title}" is ${reg.status}`,
-            timestamp: reg.createdAt,
-            status: reg.status
-          }));
+          const studentActivities = res.data.data.registrations
+            .slice(0, 3)
+            .map((reg) => ({
+              action: reg.isCertificateIssued
+                ? `Certificate issued for "${reg.eventId?.title || "Unknown Event"}"`
+                : `Your registration for "${reg.eventId?.title || "Unknown Event"}" is ${reg.status}`,
+              timestamp: reg.createdAt,
+              status: reg.status,
+            }));
+
           if (studentActivities.length > 0) {
             setActivities(studentActivities);
           }
         } else {
-
           const res = await axios.get("/api/v1/registrations/admin");
           setRegCount(res.data.results);
-          
+
           // Notify admin about new pending registrations
-          const pendingCount = res.data.data.registrations.filter(r => r.status === 'pending' && !r.isRead).length;
+          const pendingCount = res.data.data.registrations.filter(
+            (r) => r.status === "pending" && !r.isRead,
+          ).length;
           if (pendingCount > 0) {
-             toast.info(`You have ${pendingCount} new pending event registrations to review.`, {
-               icon: '📩',
-               position: 'bottom-right'
-             });
+            toast.info(
+              `You have ${pendingCount} new pending event registrations to review.`,
+              {
+                icon: "📩",
+                position: "bottom-right",
+              },
+            );
           }
         }
       } catch (regError) {
         console.error("Registration fetch failed", regError);
       }
-
     } catch (error) {
-
       console.error("Dashboard fetch error:", error);
       toast.error("Failed to load dashboard data");
     } finally {
@@ -125,32 +165,9 @@ const Dashboard = () => {
     }
   }, [user]);
 
-
   useEffect(() => {
     if (user) {
       fetchDashboardData();
-
-      // Notify student about approved/rejected registrations
-      if (user.role === "student") {
-        const checkNotifications = async () => {
-          try {
-             const res = await axios.get("/api/v1/registrations/my-registrations");
-             const unread = res.data.data.registrations.filter(r => !r.isStudentRead);
-             unread.forEach(reg => {
-                if (reg.status !== 'pending') {
-                  toast.info(`Update: Your registration for "${reg.eventId.title}" has been ${reg.status}!`, {
-                    position: "top-right",
-                    autoClose: 5000,
-                    icon: reg.status === 'approved' ? '✅' : '❌'
-                  });
-                }
-             });
-          } catch (err) {
-             console.error("Notification check failed", err);
-          }
-        };
-        checkNotifications();
-      }
 
       // Notification for Super Admin about pending approvals
       if (user.role === "superAdmin") {
@@ -181,7 +198,6 @@ const Dashboard = () => {
       }
     }
   }, [user, fetchDashboardData]);
-
 
   if (!user) {
     return (
@@ -221,6 +237,27 @@ const Dashboard = () => {
     return new Date(date).toLocaleDateString();
   };
 
+  const getGoogleCalendarUrl = (event) => {
+    const formatTime = (date) =>
+      new Date(date).toISOString().replace(/-|:|\.\d+/g, "");
+    const start = formatTime(event.startDate);
+    // End date might not exist in all events, default to +1 hour if missing
+    const end = event.endDate
+      ? formatTime(event.endDate)
+      : formatTime(
+          new Date(new Date(event.startDate).getTime() + 60 * 60 * 1000),
+        );
+
+    const params = new URLSearchParams({
+      action: "TEMPLATE",
+      text: event.title,
+      dates: `${start}/${end}`,
+      details: event.description || "Join us for this event!",
+      location: event.location,
+    });
+    return `https://www.google.com/calendar/render?${params.toString()}`;
+  };
+
   const handleMarkAsRead = async (regId) => {
     try {
       await axios.patch(`/api/v1/registrations/${regId}/student-read`);
@@ -230,6 +267,87 @@ const Dashboard = () => {
       setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (error) {
       console.error("Failed to mark as read", error);
+    }
+  };
+
+  const handleDownloadAdmitCard = async (regId, eventTitle) => {
+    try {
+      if (!regId) return toast.error("Invalid registration ID");
+      const title = eventTitle || "Event";
+
+      const response = await axios.get(
+        `/api/v1/registrations/${regId}/download-admit-card`,
+        {
+          responseType: "blob",
+        },
+      );
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute(
+        "download",
+        `AdmitCard-${title.replace(/\s+/g, "_")}.pdf`,
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      console.error("Admit card download error:", error);
+      if (
+        error.response &&
+        error.response.data &&
+        error.response.data.type === 'application/json'
+      ) {
+        // Since responseType is blob, read the blob as text to parse the JSON error
+        const reader = new FileReader();
+        reader.onload = () => {
+          const errMsg = JSON.parse(reader.result).message;
+          toast.error(errMsg || "Failed to download admit card");
+        };
+        reader.readAsText(error.response.data);
+      } else {
+        toast.error("Failed to download admit card");
+      }
+    }
+  };
+
+  const handleDownloadCertificate = async (regId, eventTitle) => {
+    try {
+      if (!regId) return toast.error("Invalid registration ID");
+      const title = eventTitle || "Event";
+
+      const response = await axios.get(
+        `/api/v1/registrations/${regId}/download-certificate`,
+        {
+          responseType: "blob",
+        },
+      );
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute(
+        "download",
+        `Certificate-${title.replace(/\s+/g, "_")}.pdf`,
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      console.error("Certificate download error:", error);
+      if (
+        error.response &&
+        error.response.data &&
+        error.response.data.type === 'application/json'
+      ) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const errMsg = JSON.parse(reader.result).message;
+          toast.error(errMsg || "Failed to download certificate");
+        };
+        reader.readAsText(error.response.data);
+      } else {
+        toast.error("Failed to download certificate");
+      }
     }
   };
 
@@ -249,7 +367,8 @@ const Dashboard = () => {
       trend: { value: 2, label: "this week" },
     },
     {
-      title: user.role === 'student' ? "My Registrations" : "Total Registrations",
+      title:
+        user.role === "student" ? "My Registrations" : "Total Registrations",
       value: regCount.toString(),
       icon: TicketIcon,
       trend: { value: 12, label: "this month" },
@@ -295,8 +414,10 @@ const Dashboard = () => {
                   onClick={() => {
                     setActiveTab("Upcoming");
                     if (hasNewEvents) {
-                       setHasNewEvents(false);
-                       axios.patch('/api/v1/users/update-last-viewed-events').catch(console.error);
+                      setHasNewEvents(false);
+                      axios
+                        .patch("/api/v1/users/update-last-viewed-events")
+                        .catch(console.error);
                     }
                   }}
                   className={`pb-4 text-sm font-bold transition-all relative ${
@@ -308,8 +429,8 @@ const Dashboard = () => {
                   Upcoming Events
                   {hasNewEvents && (
                     <span className="absolute top-0 -right-2 flex h-2 w-2">
-                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                       <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
                     </span>
                   )}
                 </button>
@@ -342,139 +463,234 @@ const Dashboard = () => {
               </Button>
             </div>
 
-
             <div className="space-y-4">
-              {loading ? (
-                [1, 2, 3].map((i) => (
-                  <div
-                    key={i}
-                    className="h-28 bg-white/50 rounded-2xl animate-pulse"
-                  />
-                ))
-              ) : activeTab === "Upcoming" ? (
-                upcomingEvents.slice(0, 4).map((event) => (
-                  <Card
-                    key={event._id}
-                    onClick={() => handleEventClick(event)}
-                    className="p-4 flex flex-col sm:flex-row gap-5 hover:border-primary-300 transition-all cursor-pointer group shadow-sm hover:shadow-xl bg-white/80 backdrop-blur-sm"
-                  >
-                    {/* Event Card Content (Existing) */}
-                    <div className="flex-shrink-0 w-full sm:w-20 h-20 bg-primary-50 rounded-2xl flex flex-col items-center justify-center text-primary-700 group-hover:bg-primary-600 group-hover:text-white transition-all duration-300">
-                      <span className="text-[10px] font-black uppercase tracking-widest opacity-80">
-                        {new Date(event.startDate).toLocaleDateString("en-US", {
-                          month: "short",
-                        })}
-                      </span>
-                      <span className="text-2xl font-black leading-none mt-1">
-                        {new Date(event.startDate).getDate()}
-                      </span>
-                    </div>
+              {loading
+                ? [1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="h-28 bg-white/50 rounded-2xl animate-pulse"
+                    />
+                  ))
+                : activeTab === "Upcoming"
+                  ? upcomingEvents.slice(0, 4).map((event) => (
+                      <Card
+                        key={event._id}
+                        onClick={() => handleEventClick(event)}
+                        className="p-4 flex flex-col sm:flex-row gap-5 hover:border-primary-300 transition-all cursor-pointer group shadow-sm hover:shadow-xl bg-white/80 backdrop-blur-sm"
+                      >
+                        {/* Event Card Content (Existing) */}
+                        <div className="flex-shrink-0 w-full sm:w-20 h-20 bg-primary-50 rounded-2xl flex flex-col items-center justify-center text-primary-700 group-hover:bg-primary-600 group-hover:text-white transition-all duration-300">
+                          <span className="text-[10px] font-black uppercase tracking-widest opacity-80">
+                            {new Date(event.startDate).toLocaleDateString(
+                              "en-US",
+                              {
+                                month: "short",
+                              },
+                            )}
+                          </span>
+                          <span className="text-2xl font-black leading-none mt-1">
+                            {new Date(event.startDate).getDate()}
+                          </span>
+                        </div>
 
-                    <div className="flex-grow py-1">
-                      <div className="flex items-start justify-between mb-1.5">
-                        <span
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${getCategoryColor(
-                            event.category,
-                          )} shadow-sm`}
-                        >
-                          {event.category}
-                        </span>
-                        <div className="flex gap-2">
-                          {new Date() > new Date(event.endDate) && (
-                            <div className="flex items-center gap-1.5 bg-red-50 text-red-600 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter border border-red-100">
-                              Completed
+                        <div className="flex-grow py-1">
+                          <div className="flex items-start justify-between mb-1.5">
+                            <span
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${getCategoryColor(
+                                event.category,
+                              )} shadow-sm`}
+                            >
+                              {event.category}
+                            </span>
+                            <div className="flex gap-2">
+                              {new Date() > new Date(event.endDate) && (
+                                <div className="flex items-center gap-1.5 bg-red-50 text-red-600 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter border border-red-100">
+                                  Completed
+                                </div>
+                              )}
+                              <div className="flex items-center gap-1.5 bg-success/10 text-success px-2 py-0.5 rounded-full text-[10px] font-black">
+                                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
+                                FREE
+                              </div>
                             </div>
-                          )}
-                          <div className="flex items-center gap-1.5 bg-success/10 text-success px-2 py-0.5 rounded-full text-[10px] font-black">
-                            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
-                            FREE
+                          </div>
+                          <h3 className="text-xl font-bold text-secondary-900 group-hover:text-primary-600 transition-colors">
+                            {event.title}
+                          </h3>
+                          <div className="flex items-center text-xs text-secondary-500 gap-5 mt-2 font-medium">
+                            <div className="flex items-center gap-1.5">
+                              <ClockIcon className="w-4 h-4 text-primary-500" />
+                              {new Date(event.startDate).toLocaleTimeString(
+                                [],
+                                {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                },
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <MapPinIcon className="w-4 h-4 text-primary-500" />
+                              {event.location}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <h3 className="text-xl font-bold text-secondary-900 group-hover:text-primary-600 transition-colors">
-                        {event.title}
-                      </h3>
-                      <div className="flex items-center text-xs text-secondary-500 gap-5 mt-2 font-medium">
-                        <div className="flex items-center gap-1.5">
-                          <ClockIcon className="w-4 h-4 text-primary-500" />
-                          {new Date(event.startDate).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <MapPinIcon className="w-4 h-4 text-primary-500" />
-                          {event.location}
-                        </div>
-                      </div>
-                    </div>
 
-                    <div className="flex-shrink-0 flex items-center pr-2">
-                      <div className="w-10 h-10 rounded-full border border-secondary-100 flex items-center justify-center group-hover:bg-primary-50 group-hover:border-primary-200 transition-all">
-                        <CalendarIcon className="w-5 h-5 text-secondary-400 group-hover:text-primary-600" />
-                      </div>
-                    </div>
-                  </Card>
-                ))
-              ) : (
-                registrations.map((reg) => (
-                  <Card
-                    key={reg._id}
-                    onMouseEnter={() => !reg.isStudentRead && handleMarkAsRead(reg._id)}
-                    className={`p-5 hover:border-primary-300 transition-all shadow-sm bg-white/80 backdrop-blur-sm relative overflow-hidden ${!reg.isStudentRead ? 'border-l-4 border-l-primary-500' : ''}`}
-                  >
-                    {!reg.isStudentRead && (
-                       <div className="absolute top-0 right-0">
-                         <div className="bg-primary-500 text-white text-[8px] font-bold px-2 py-0.5 rounded-bl-lg">NEW UPDATE</div>
-                       </div>
-                    )}
-                    <div className="flex flex-col sm:flex-row gap-5">
-                       <div className="flex-shrink-0 w-full sm:w-16 h-16 bg-secondary-50 rounded-xl flex items-center justify-center overflow-hidden">
-                          {reg.eventId.image ? (
-                            <img src={reg.eventId.image} alt={reg.eventId.title} className="w-full h-full object-cover" />
-                          ) : (
-                            <TicketIcon className="w-8 h-8 text-secondary-300" />
-                          )}
-                       </div>
-                       <div className="flex-grow">
-                          <div className="flex items-start justify-between mb-1">
-                             <h3 className="font-bold text-secondary-900">{reg.eventId.title}</h3>
-                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm 
-                                ${reg.status === 'approved' ? 'bg-green-100 text-green-700' : 
-                                  reg.status === 'rejected' ? 'bg-red-100 text-red-700' : 
-                                  'bg-orange-100 text-orange-700'}`}
-                             >
-                               {reg.status}
-                             </span>
+                        <div className="flex-shrink-0 flex items-center pr-2">
+                          <div className="w-10 h-10 rounded-full border border-secondary-100 flex items-center justify-center group-hover:bg-primary-50 group-hover:border-primary-200 transition-all">
+                            <CalendarIcon className="w-5 h-5 text-secondary-400 group-hover:text-primary-600" />
                           </div>
-                          <div className="flex items-center text-[10px] font-bold text-secondary-500 gap-4 mt-1">
-                             <div className="flex items-center gap-1">
+                        </div>
+                      </Card>
+                    ))
+                  : registrations.map((reg) => (
+                      <Card
+                        key={reg._id}
+                        onMouseEnter={() =>
+                          !reg.isStudentRead && handleMarkAsRead(reg._id)
+                        }
+                        className={`p-5 hover:border-primary-300 transition-all shadow-sm bg-white/80 backdrop-blur-sm relative overflow-hidden ${!reg.isStudentRead ? "border-l-4 border-l-primary-500" : ""}`}
+                      >
+                        {!reg.isStudentRead && (
+                          <div className="absolute top-0 right-0">
+                            <div className="bg-primary-500 text-white text-[8px] font-bold px-2 py-0.5 rounded-bl-lg">
+                              NEW UPDATE
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex flex-col sm:flex-row gap-5">
+                          <div className="flex-shrink-0 w-full sm:w-16 h-16 bg-secondary-50 rounded-xl flex items-center justify-center overflow-hidden">
+                            {reg.eventId.image ? (
+                              <img
+                                src={reg.eventId.image}
+                                alt={reg.eventId?.title || "Event"}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <TicketIcon className="w-8 h-8 text-secondary-300" />
+                            )}
+                          </div>
+                          <div className="flex-grow">
+                            <div className="flex items-start justify-between mb-1">
+                              <h3 className="font-bold text-secondary-900">
+                                {reg.eventId?.title || "Event"}
+                              </h3>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm 
+                                ${
+                                  reg.status === "approved"
+                                    ? "bg-green-100 text-green-700"
+                                    : reg.status === "rejected"
+                                      ? "bg-red-100 text-red-700"
+                                      : "bg-orange-100 text-orange-700"
+                                }`}
+                              >
+                                {reg.status}
+                              </span>
+                            </div>
+                            <div className="flex items-center text-[10px] font-bold text-secondary-500 gap-4 mt-1">
+                              <div className="flex items-center gap-1">
                                 <ClockIcon className="w-3.5 h-3.5 text-primary-500" />
-                                {new Date(reg.eventId.startDate).toLocaleDateString()}
-                             </div>
-                             <div className="flex items-center gap-1">
+                                {new Date(
+                                  reg.eventId.startDate,
+                                ).toLocaleDateString()}
+                              </div>
+                              <div className="flex items-center gap-1">
                                 <MapPinIcon className="w-3.5 h-3.5 text-primary-500" />
                                 {reg.eventId.location}
-                             </div>
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-secondary-400 mt-2">
+                              Organized by:{" "}
+                              <span className="text-secondary-600">
+                                {reg.adminId.college}
+                              </span>
+                            </p>
+                            {reg.status === "approved" && (
+                              <div className="flex flex-wrap gap-4 mt-4">
+                                <a
+                                  href={getGoogleCalendarUrl(reg.eventId)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-[10px] font-black uppercase tracking-widest text-white rounded-xl transition-all shadow-sm hover:shadow-md"
+                                >
+                                  <SparklesIcon className="w-3.5 h-3.5" />
+                                  Add to Calendar
+                                </a>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownloadAdmitCard(
+                                      reg._id,
+                                      reg.eventId?.title || "Event",
+                                    );
+                                  }}
+                                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-[10px] font-black uppercase tracking-widest text-white rounded-xl transition-all shadow-sm hover:shadow-md"
+                                >
+                                  <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                                  Admit Card
+                                </button>
+                                {reg.isCertificateIssued && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDownloadCertificate(
+                                        reg._id,
+                                        reg.eventId?.title || "Event",
+                                      );
+                                    }}
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-[10px] font-black uppercase tracking-widest text-white rounded-xl transition-all shadow-sm hover:shadow-md"
+                                  >
+                                    <AcademicCapIcon className="w-3.5 h-3.5" />
+                                    Certificate
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="flex gap-4 mt-3 border-t border-secondary-50 pt-3">
+                              <span
+                                className={`flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider ${
+                                  reg.attendanceStatus === "present"
+                                    ? "text-success"
+                                    : reg.attendanceStatus === "pending"
+                                      ? "text-orange-500"
+                                      : "text-secondary-400"
+                                }`}
+                              >
+                                <CheckCircleIcon className="w-3.5 h-3.5" />
+                                Attendance: {reg.attendanceStatus}
+                              </span>
+                              {reg.isCertificateIssued && (
+                                <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-blue-600">
+                                  <AcademicCapIcon className="w-3.5 h-3.5" />
+                                  Certificate Issued
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <p className="text-[10px] text-secondary-400 mt-2">
-                             Organized by: <span className="text-secondary-600">{reg.adminId.college}</span>
-                          </p>
-                       </div>
-                    </div>
-                  </Card>
-                ))
-              )}
+                        </div>
+                      </Card>
+                    ))}
 
-              {!loading && activeTab === "Registered" && registrations.length === 0 && (
-                 <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-secondary-200">
-                   <TicketIcon className="w-12 h-12 text-secondary-200 mx-auto mb-3" />
-                   <p className="text-secondary-500 font-medium">You haven't registered for any events yet.</p>
-                   <Button variant="ghost" className="mt-2 text-primary-600" onClick={() => navigate("/events")}>Explore Events</Button>
-                 </div>
-              )}
+              {!loading &&
+                activeTab === "Registered" &&
+                registrations.length === 0 && (
+                  <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-secondary-200">
+                    <TicketIcon className="w-12 h-12 text-secondary-200 mx-auto mb-3" />
+                    <p className="text-secondary-500 font-medium">
+                      You haven't registered for any events yet.
+                    </p>
+                    <Button
+                      variant="ghost"
+                      className="mt-2 text-primary-600"
+                      onClick={() => navigate("/events")}
+                    >
+                      Explore Events
+                    </Button>
+                  </div>
+                )}
             </div>
-
           </div>
 
           <div className="space-y-6">

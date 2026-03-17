@@ -2,6 +2,8 @@ const Event = require('../models/eventModel');
 const AdminLog = require('../models/adminLogModel');
 const Registration = require('../models/registrationModel');
 const { Parser } = require('json2csv');
+const ExcelJS = require('exceljs');
+const PDFDocument = require('pdfkit-table');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -279,11 +281,12 @@ exports.deleteEvent = catchAsync(async (req, res, next) => {
   });
 });
 
-exports.exportParticipantsCSV = catchAsync(async (req, res, next) => {
+exports.exportParticipants = catchAsync(async (req, res, next) => {
   const { id: eventId } = req.params;
+  const { format = 'csv' } = req.query;
 
   // 1. Verify the event exists
-  const event = await Event.findById(eventId);
+  const event = await Event.findById(eventId).populate('collegeId', 'college');
   if (!event) {
     return next(new AppError('No event found with that ID', 404));
   }
@@ -291,41 +294,107 @@ exports.exportParticipantsCSV = catchAsync(async (req, res, next) => {
   // 2. Check authorization
   if (
     req.user.role !== 'superAdmin' &&
-    event.collegeId.toString() !== req.user.id
+    event.collegeId?._id?.toString() !== req.user.id
   ) {
     return next(new AppError("You are not authorized to export this event's participants.", 403));
   }
 
   // 3. Fetch all registrations for this event
   const registrations = await Registration.find({ eventId })
-    .populate('studentId', 'name email college');
+    .populate('studentId', 'name email college')
+    .sort('-createdAt');
 
   if (!registrations || registrations.length === 0) {
     return next(new AppError('No participants found for this event.', 404));
   }
 
-  // 4. Map registrations to CSV rows
-  const rows = registrations.map(reg => ({
+  const fileName = `participants-${event.title.replace(/\s+/g, '_')}-${new Date().toISOString().split('T')[0]}`;
+
+  // 4. Map registrations to standardized rows
+  const rows = registrations.map((reg, index) => ({
+    "S.No": index + 1,
     "Student Name": reg.studentId?.name || "N/A",
     "Email": reg.studentId?.email || "N/A",
     "College": reg.studentId?.college || "N/A",
-    "Status": reg.status || "N/A",
+    "Status": reg.status ? reg.status.toUpperCase() : "N/A",
     "Registered At": new Date(reg.createdAt).toLocaleString()
   }));
 
-  // 5. Convert to CSV using json2csv
-  const fields = [
-    "Student Name", "Email", "College",
-    "Status", "Registered At"
-  ];
-  const parser = new Parser({ fields });
-  const csv = parser.parse(rows);
+  // 5. Handle different formats
+  if (format === 'csv') {
+    const fields = ["S.No", "Student Name", "Email", "College", "Status", "Registered At"];
+    const parser = new Parser({ fields });
+    const csv = parser.parse(rows);
 
-  // 6. Set response headers and send CSV
-  res.setHeader("Content-Type", "text/csv");
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename="participants-${eventId}.csv"`
-  );
-  res.status(200).end(csv);
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}.csv"`);
+    return res.status(200).end(csv);
+  }
+
+  if (format === 'xlsx') {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Participants');
+
+    worksheet.columns = [
+      { header: 'S.No', key: 'S.No', width: 10 },
+      { header: 'Student Name', key: 'Student Name', width: 30 },
+      { header: 'Email', key: 'Email', width: 35 },
+      { header: 'College', key: 'College', width: 30 },
+      { header: 'Status', key: 'Status', width: 15 },
+      { header: 'Registered At', key: 'Registered At', width: 25 }
+    ];
+
+    // Style the header
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0E0E0' }
+    };
+
+    worksheet.addRows(rows);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}.xlsx"`);
+
+    await workbook.xlsx.write(res);
+    return res.status(200).end();
+  }
+
+  if (format === 'pdf') {
+    const doc = new PDFDocument({ margin: 30, size: 'A4' });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}.pdf"`);
+
+    doc.pipe(res);
+
+    // Header
+    doc.fontSize(20).text('Event Participants Report', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12).text(`Event: ${event.title}`, { bold: true });
+    doc.text(`Host: ${event.collegeId?.college || 'N/A'}`);
+    doc.text(`Date of Export: ${new Date().toLocaleString()}`);
+    doc.moveDown();
+
+    // Table
+    const table = {
+      title: "Participants List",
+      subtitle: `Total Registrations: ${registrations.length}`,
+      headers: ["S.No", "Student Name", "Email", "College", "Status"],
+      rows: rows.map(r => [r["S.No"], r["Student Name"], r["Email"], r["College"], r["Status"]])
+    };
+
+    await doc.table(table, {
+      prepareHeader: () => doc.font('Helvetica-Bold').fontSize(10),
+      prepareRow: (row, indexColumn, indexRow, rectRow, rectCell) => {
+        doc.font('Helvetica').fontSize(10);
+      },
+    });
+
+    doc.end();
+    return;
+  }
+
+  return next(new AppError('Invalid export format', 400));
 });

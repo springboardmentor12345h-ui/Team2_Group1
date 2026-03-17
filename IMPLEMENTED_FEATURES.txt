@@ -1,0 +1,61 @@
+=====================================================
+            CAMPUS EVENT HUB - NEW FEATURES GUIDE
+=====================================================
+
+This document outlines the major features recently implemented for 
+Admit Card and Certificate management.
+
+-----------------------------------------------------
+1. ADMIT CARD SYSTEM
+-----------------------------------------------------
+- AUTOMATIC GENERATION: A unique 6-digit alphanumeric 'Admit Card Code' 
+  is generated as soon as a registration is APPROVED by an admin.
+- PDF DOWNLOAD: Students can download their Admit Card directly from 
+  their Dashboard once approved.
+- LAYOUT: Professional A4 PDF containing Student Details, Event Title, 
+  Venue, Date, and a dashed box with the Verification Code.
+
+-----------------------------------------------------
+2. ATTENDANCE & CERTIFICATE ISSUANCE (ADMIN)
+-----------------------------------------------------
+- ATTENDANCE REQUIREMENT: Certificates can ONLY be issued to students 
+  marked as 'Present' (Attendance marked by the host admin).
+- ISSUANCE FLOW: 
+  1. Go to Registration Management.
+  2. Mark student as 'Present'.
+  3. Click 'Issue Certificate'.
+- NOTIFICATION: Upon issuance, the student is automatically notified 
+  via email (and a dashboard toast upon their next login).
+
+-----------------------------------------------------
+3. CERTIFICATE DOWNLOAD (STUDENT)
+-----------------------------------------------------
+- DASHBOARD BUTTON: A new 'Certificate' button appears on the student's 
+  registration card once the admin issues it.
+- LANDSCAPE DESIGN: Downloads a high-quality landscape PDF with elegant 
+  serif typography (resembling the email theme).
+- SMART ALIGNMENT: The template uses dynamic spacing to ensure text 
+  never overlaps, even with long Event Titles or College names.
+
+-----------------------------------------------------
+4. NOTIFICATION & LOGGING SYSTEM
+-----------------------------------------------------
+- LOGIN TOASTS: Students see specific toast notifications when they log 
+  in ("Congratulations! Your certificate has been issued!") with a 
+  graduation cap icon (🎓).
+- EMAIL PREVIEWS: In development mode, check the BACKEND TERMINAL 
+  system logs for 'ETHEREAL PREVIEW URLs'. You can click these to see 
+  exactly what the student receives.
+- ACTIVITY FEED: The 'Activities' section on the dashboard now correctly 
+  shows "Certificate issued for [Event]" updates.
+
+-----------------------------------------------------
+HOW TO TEST THE FULL FLOW:
+-----------------------------------------------------
+1. LOGIN AS ADMIN: Approve a pending registration.
+2. CHECK TERMINAL: Look for "🎫 Admit Card Preview URL" to see the email.
+3. LOGIN AS STUDENT: Download the Admit Card from the Dashboard.
+4. LOGIN AS ADMIN: Mark the student as 'Present' and click 'Issue Certificate'.
+5. LOGIN AS STUDENT: 
+   - Observe the "Congratulations! Your certificate..." toast.
+   - Click the new 'Certificate' button to download the PDF.
