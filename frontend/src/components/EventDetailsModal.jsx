@@ -3,6 +3,8 @@ import Modal from "./ui/Modal";
 import AuthContext from "../context/AuthContext";
 import { toast } from "react-toastify";
 import axios from "axios";
+import CommentSection from "./CommentSection";
+import EventRating from "./EventRating";
 import {
   CalendarIcon,
   ClockIcon,
@@ -21,6 +23,7 @@ const EventDetailsModal = ({ isOpen, onClose, event, onRegisterSuccess }) => {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
+  const [activeTab, setActiveTab] = useState("Details");
 
   React.useEffect(() => {
     const checkRegistration = async () => {
@@ -132,14 +135,20 @@ const EventDetailsModal = ({ isOpen, onClose, event, onRegisterSuccess }) => {
             </div>
 
             <div className="flex border-b border-secondary-100 mb-8">
-              <button className="px-4 py-2 text-primary-600 border-b-2 border-primary-600 font-bold text-sm">
+              <button 
+                onClick={() => setActiveTab("Details")} 
+                className={`px-4 py-2 font-bold text-sm ${activeTab === "Details" ? "text-primary-600 border-b-2 border-primary-600" : "text-secondary-400 font-medium hover:text-secondary-600"}`}>
                 Event Details
               </button>
-              <button className="px-4 py-2 text-secondary-400 font-medium text-sm hover:text-secondary-600">
-                Comments (0)
+              <button 
+                onClick={() => setActiveTab("Feedback")} 
+                className={`px-4 py-2 font-bold text-sm ${activeTab === "Feedback" ? "text-primary-600 border-b-2 border-primary-600" : "text-secondary-400 font-medium hover:text-secondary-600"}`}>
+                Feedback & Comments
               </button>
             </div>
 
+            {activeTab === "Details" ? (
+              <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
               <div className="space-y-6">
                 <div className="flex items-start gap-4">
@@ -249,6 +258,13 @@ const EventDetailsModal = ({ isOpen, onClose, event, onRegisterSuccess }) => {
                 {event.description}
               </p>
             </div>
+            </>
+            ) : (
+              <div className="space-y-8 animate-fade-in">
+                <EventRating eventId={event._id} currentUserId={user?._id} />
+                <CommentSection eventId={event._id} />
+              </div>
+            )}
 
             {(!user || user.role === "student") && (
               <div className="mt-8 flex gap-4">
