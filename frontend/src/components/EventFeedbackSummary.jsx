@@ -24,6 +24,7 @@ const EventFeedbackSummary = ({ eventId, eventTitle }) => {
       setLoading(false);
     }
   };
+  
 
   if (loading) return <div className="animate-pulse h-8 w-24 bg-secondary-50 rounded-lg shrink-0"></div>;
   if (!summary) return <span className="text-[10px] text-secondary-400 font-bold">N/A</span>;
