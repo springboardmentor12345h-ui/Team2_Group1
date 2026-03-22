@@ -19,6 +19,7 @@ import {
   ArrowDownTrayIcon,
 } from "@heroicons/react/24/outline";
 import EditEventModal from "../components/EditEventModal";
+import EventFeedbackSummary from "../components/EventFeedbackSummary";
 import axios from "axios";
 import { useContext } from "react";
 import AuthContext from "../context/AuthContext";
@@ -712,6 +713,9 @@ const AdminPanel = () => {
                       Launch Date
                     </th>
                     <th className="px-8 py-6 border-b border-secondary-100">
+                      Feedback
+                    </th>
+                    <th className="px-8 py-6 border-b border-secondary-100">
                       Global Status
                     </th>
                   </tr>
@@ -755,6 +759,9 @@ const AdminPanel = () => {
                           day: "2-digit",
                           year: "numeric",
                         })}
+                      </td>
+                      <td className="px-8 py-6">
+                        <EventFeedbackSummary eventId={e._id} eventTitle={e.title} />
                       </td>
                       <td className="px-8 py-6">
                         <div className="flex items-center gap-4">
