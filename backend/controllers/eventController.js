@@ -54,6 +54,14 @@ exports.getAllEvents = catchAsync(async (req, res, next) => {
         const d = new Date(val);
         return isNaN(d.getTime()) ? val : d;
       }
+      if (
+        ['collegeId', 'adminId', '_id'].includes(field) &&
+        typeof val === 'string' &&
+        val.match(/^[0-9a-fA-F]{24}$/)
+      ) {
+        const mongoose = require('mongoose');
+        return new mongoose.Types.ObjectId(val);
+      }
       return val;
     };
 
@@ -206,10 +214,19 @@ exports.getEvent = catchAsync(async (req, res, next) => {
     return next(new AppError('No event found with that ID', 404));
   }
 
+  // Calculate actual registration count
+  const registrationCount = await Registration.countDocuments({
+    eventId: event._id,
+    status: { $in: ['approved', 'pending'] },
+  });
+
   res.status(200).json({
     status: 'success',
     data: {
-      event,
+      event: {
+        ...event._doc,
+        registrationCount,
+      },
     },
   });
 });
@@ -296,11 +313,25 @@ exports.exportParticipants = catchAsync(async (req, res, next) => {
     req.user.role !== 'superAdmin' &&
     event.collegeId?._id?.toString() !== req.user.id
   ) {
-    return next(new AppError("You are not authorized to export this event's participants.", 403));
+    return next(
+      new AppError(
+        "You are not authorized to export this event's participants.",
+        403,
+      ),
+    );
   }
 
+  // Calculate actual registration count
+  const registrationCount = await Registration.countDocuments({
+    eventId: event._id,
+    status: { $in: ['approved', 'pending'] },
+  });
+
   // 3. Fetch all registrations for this event
-  const registrations = await Registration.find({ eventId })
+  const registrations = await Registration.find({
+    eventId,
+    status: { $in: ['approved', 'pending'] },
+  })
     .populate('studentId', 'name email college')
     .sort('-createdAt');
 
@@ -312,22 +343,32 @@ exports.exportParticipants = catchAsync(async (req, res, next) => {
 
   // 4. Map registrations to standardized rows
   const rows = registrations.map((reg, index) => ({
-    "S.No": index + 1,
-    "Student Name": reg.studentId?.name || "N/A",
-    "Email": reg.studentId?.email || "N/A",
-    "College": reg.studentId?.college || "N/A",
-    "Status": reg.status ? reg.status.toUpperCase() : "N/A",
-    "Registered At": new Date(reg.createdAt).toLocaleString()
+    'S.No': index + 1,
+    'Student Name': reg.studentId?.name || 'N/A',
+    Email: reg.studentId?.email || 'N/A',
+    College: reg.studentId?.college || 'N/A',
+    Status: reg.status ? reg.status.toUpperCase() : 'N/A',
+    'Registered At': new Date(reg.createdAt).toLocaleString(),
   }));
 
   // 5. Handle different formats
   if (format === 'csv') {
-    const fields = ["S.No", "Student Name", "Email", "College", "Status", "Registered At"];
+    const fields = [
+      'S.No',
+      'Student Name',
+      'Email',
+      'College',
+      'Status',
+      'Registered At',
+    ];
     const parser = new Parser({ fields });
     const csv = parser.parse(rows);
 
-    res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}.csv"`);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName}.csv"`,
+    );
     return res.status(200).end(csv);
   }
 
@@ -341,7 +382,7 @@ exports.exportParticipants = catchAsync(async (req, res, next) => {
       { header: 'Email', key: 'Email', width: 35 },
       { header: 'College', key: 'College', width: 30 },
       { header: 'Status', key: 'Status', width: 15 },
-      { header: 'Registered At', key: 'Registered At', width: 25 }
+      { header: 'Registered At', key: 'Registered At', width: 25 },
     ];
 
     // Style the header
@@ -349,13 +390,19 @@ exports.exportParticipants = catchAsync(async (req, res, next) => {
     worksheet.getRow(1).fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFE0E0E0' }
+      fgColor: { argb: 'FFE0E0E0' },
     };
 
     worksheet.addRows(rows);
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}.xlsx"`);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName}.xlsx"`,
+    );
 
     await workbook.xlsx.write(res);
     return res.status(200).end();
@@ -365,7 +412,10 @@ exports.exportParticipants = catchAsync(async (req, res, next) => {
     const doc = new PDFDocument({ margin: 30, size: 'A4' });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName}.pdf"`,
+    );
 
     doc.pipe(res);
 
@@ -379,10 +429,16 @@ exports.exportParticipants = catchAsync(async (req, res, next) => {
 
     // Table
     const table = {
-      title: "Participants List",
+      title: 'Participants List',
       subtitle: `Total Registrations: ${registrations.length}`,
-      headers: ["S.No", "Student Name", "Email", "College", "Status"],
-      rows: rows.map(r => [r["S.No"], r["Student Name"], r["Email"], r["College"], r["Status"]])
+      headers: ['S.No', 'Student Name', 'Email', 'College', 'Status'],
+      rows: rows.map((r) => [
+        r['S.No'],
+        r['Student Name'],
+        r['Email'],
+        r['College'],
+        r['Status'],
+      ]),
     };
 
     await doc.table(table, {

@@ -26,12 +26,8 @@ export const AuthProvider = ({ children }) => {
       const userData = data.data.user;
       localStorage.setItem("userInfo", JSON.stringify(userData));
       setUser(userData);
-      return { success: true };
     } catch (error) {
-      return {
-        success: false,
-        message: error.response?.data?.message || "Login failed",
-      };
+      throw error;
     }
   };
 
@@ -55,17 +51,13 @@ export const AuthProvider = ({ children }) => {
         adminPin,
       });
       if (data.data.user.status === "pending") {
-        return { success: true, message: data.message };
+        return; // Success, but no userData yet
       }
       const userData = data.data.user;
       localStorage.setItem("userInfo", JSON.stringify(userData));
       setUser(userData);
-      return { success: true };
     } catch (error) {
-      return {
-        success: false,
-        message: error.response?.data?.message || "Registration failed",
-      };
+      throw error;
     }
   };
 

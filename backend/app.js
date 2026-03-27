@@ -5,6 +5,7 @@ const userRoutes = require('./routes/userRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const adminLogRoutes = require('./routes/adminLogRoutes');
 const registrationRoutes = require('./routes/registrationRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
 const path = require('path');
 const AppError = require('./utils/appError');
 const globalErrorHandler = require('./controllers/errorController');
@@ -34,6 +35,7 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/events', eventRoutes);
 app.use('/api/v1/logs', adminLogRoutes);
 app.use('/api/v1/registrations', registrationRoutes);
+app.use('/api/v1/reviews', reviewRoutes);
 
 app.use((req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
