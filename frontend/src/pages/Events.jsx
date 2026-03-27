@@ -16,9 +16,18 @@ import AuthContext from "../context/AuthContext";
 import EventDetailsModal from "../components/EventDetailsModal";
 import CreateEventModal from "../components/CreateEventModal";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom"; // Import useNavigate
 
 const Events = () => {
   const { user } = useContext(AuthContext);
+  const navigate = useNavigate(); // Initialize useNavigate
+
+  useEffect(() => {
+    if (!user) {
+      navigate("/login");
+    }
+  }, [user, navigate]);
+
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -28,7 +37,6 @@ const Events = () => {
   const [status, setStatus] = useState("All");
   const [date, setDate] = useState("");
   const [userRegistrations, setUserRegistrations] = useState([]);
-
 
   // Reset page when filters change
   useEffect(() => {
@@ -43,7 +51,7 @@ const Events = () => {
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
-      let url = `/api/v1/events?page=${page}&limit=6&`;
+      let url = `/api/v1/events?page=${page}&limit=8&`;
       if (query) url += `search=${query}&`;
       if (category !== "All Types") url += `category=${category}&`;
       if (status === "Upcoming")
@@ -61,14 +69,13 @@ const Events = () => {
       const { data } = await axios.get(url);
 
       setEvents(data.data.events);
-      setTotalPages(Math.ceil(data.totalResults / 6));
-    } catch (error) {
+      setTotalPages(Math.ceil(data.totalResults / 8));
+    } catch {
       toast.error("Failed to load events");
     } finally {
       setLoading(false);
     }
   }, [page, query, category, status, date]);
-
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -81,29 +88,23 @@ const Events = () => {
   const fetchUserRegistrations = useCallback(async () => {
     if (!user || user.role !== "student") return;
     try {
-      const { data } = await axios.get("/api/v1/registrations/my-registrations");
+      const { data } = await axios.get(
+        "/api/v1/registrations/my-registrations",
+      );
       setUserRegistrations(data.data.registrations.map((r) => r.eventId._id));
     } catch (error) {
       console.error("Failed to load user registrations", error);
     }
   }, [user]);
 
-
   useEffect(() => {
     fetchUserRegistrations();
   }, [fetchUserRegistrations]);
 
-
   const handleViewDetails = (event) => {
-    if (userRegistrations.includes(event._id)) {
-      toast.info("You are already registered for this event.");
-      return;
-    }
     setSelectedEvent(event);
     setIsDetailsOpen(true);
   };
-
-
 
   const getCategoryColor = (cat) => {
     const colors = {
@@ -142,11 +143,9 @@ const Events = () => {
     return "Upcoming";
   };
 
-
   return (
     <div className="min-h-screen bg-secondary-50 pb-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
+      <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-12 py-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-bold text-secondary-900">
@@ -221,7 +220,7 @@ const Events = () => {
 
         {/* Loading State */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {[1, 2, 3].map((i) => (
               <div
                 key={i}
@@ -237,7 +236,7 @@ const Events = () => {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {events.map((event) => (
               <Card
                 key={event._id}
@@ -275,29 +274,29 @@ const Events = () => {
                   </div>
                 </div>
 
-                <div className="p-6 flex flex-col flex-grow">
-                  <div className="mb-4 flex items-center justify-between">
+                <div className="p-5 flex flex-col flex-grow">
+                  <div className="mb-3 flex items-center justify-between">
                     <span
-                      className={`inline-block px-3 py-1 text-xs font-bold rounded-full uppercase tracking-wider ${getCategoryColor(event.category)}`}
+                      className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${getCategoryColor(event.category)}`}
                     >
                       {event.category}
                     </span>
-                    <span className="text-xs font-medium text-secondary-400">
-                      College: {event.collegeId?.college || "Global"}
+                    <span className="text-[10px] font-medium text-secondary-400">
+                      {event.collegeId?.college || "Global"}
                     </span>
                   </div>
 
-                  <h3 className="text-xl font-bold text-secondary-900 mb-2 group-hover:text-primary-600 transition-colors line-clamp-1">
+                  <h3 className="text-lg font-bold text-secondary-900 mb-1 group-hover:text-primary-600 transition-colors line-clamp-1">
                     {event.title}
                   </h3>
 
-                  <p className="text-sm text-secondary-500 mb-6 line-clamp-3 leading-relaxed">
+                  <p className="text-xs text-secondary-500 mb-4 line-clamp-2 leading-relaxed">
                     {event.description}
                   </p>
 
-                  <div className="grid grid-cols-2 gap-4 text-sm font-medium text-secondary-600 mb-6 mt-auto">
-                    <div className="flex items-center gap-2">
-                      <CalendarIcon className="w-5 h-5 text-primary-500" />
+                  <div className="grid grid-cols-2 gap-2 text-[11px] font-medium text-secondary-600 mb-5 mt-auto">
+                    <div className="flex items-center gap-1.5">
+                      <CalendarIcon className="w-4 h-4 text-primary-500" />
                       <span>
                         {new Date(event.startDate).toLocaleDateString("en-US", {
                           month: "short",
@@ -317,11 +316,15 @@ const Events = () => {
                   </div>
 
                   <Button
-                    variant={userRegistrations.includes(event._id) ? "primary" : "outline"}
+                    variant={
+                      userRegistrations.includes(event._id)
+                        ? "primary"
+                        : "outline"
+                    }
                     className={`w-full justify-center rounded-xl py-3 font-bold transition-all ${
-                       userRegistrations.includes(event._id) 
-                       ? "bg-primary-600 text-white border-primary-600 cursor-default" 
-                       : "border-secondary-200 group-hover:border-primary-500 group-hover:bg-primary-50 group-hover:text-primary-700"
+                      userRegistrations.includes(event._id)
+                        ? "bg-primary-600 text-white border-primary-600 cursor-default"
+                        : "border-secondary-200 group-hover:border-primary-500 group-hover:bg-primary-50 group-hover:text-primary-700"
                     }`}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -330,9 +333,10 @@ const Events = () => {
                       }
                     }}
                   >
-                    {userRegistrations.includes(event._id) ? "Registered" : "View Full Details"}
+                    {userRegistrations.includes(event._id)
+                      ? "Registered"
+                      : "View Full Details"}
                   </Button>
-
                 </div>
               </Card>
             ))}
@@ -419,7 +423,6 @@ const Events = () => {
         event={selectedEvent}
         onRegisterSuccess={fetchUserRegistrations}
       />
-
 
       <CreateEventModal
         isOpen={isCreateOpen}

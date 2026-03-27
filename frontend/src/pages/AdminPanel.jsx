@@ -14,15 +14,18 @@ import {
   XMarkIcon,
   DocumentArrowDownIcon,
   ChevronDownIcon,
-  QrCodeIcon,
+  TicketIcon,
   AcademicCapIcon,
   ArrowDownTrayIcon,
+  StarIcon,
 } from "@heroicons/react/24/outline";
+import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
+import { formatDistanceToNow } from "date-fns";
 import EditEventModal from "../components/EditEventModal";
 import axios from "axios";
 import { useContext } from "react";
 import AuthContext from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import StatsCard from "../components/ui/StatsCard";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
@@ -31,8 +34,11 @@ import { toast } from "react-toastify";
 const AdminPanel = () => {
   const { user, loading: authLoading } = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [activeTab, setActiveTab] = useState("Overview");
+  const [activeTab, setActiveTab] = useState(
+    location.state?.activeTab || "Overview",
+  );
   const [usersData, setUsersData] = useState([]);
   const [eventsData, setEventsData] = useState([]);
   const [logsData, setLogsData] = useState([]);
@@ -59,15 +65,20 @@ const AdminPanel = () => {
   const [registrationsPage, setRegistrationsPage] = useState(1);
   const [registrationsTotal, setRegistrationsTotal] = useState(1);
   const [pendingRegistrationsCount, setPendingRegistrationsCount] = useState(0);
+  const [totalRegistrationsCount, setTotalRegistrationsCount] = useState(0);
+  const [upcomingEventsCount, setUpcomingEventsCount] = useState(0);
   const [verificationCode, setVerificationCode] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [issuingCertId, setIssuingCertId] = useState(null);
+  const [reviewsData, setReviewsData] = useState([]);
+  const [reviewsPage, setReviewsPage] = useState(1);
+  const [reviewsTotal, setReviewsTotal] = useState(1);
 
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!user) {
       navigate("/login");
     }
-  }, [user, authLoading, navigate]);
+  }, [user, navigate]);
 
   const fetchAdminData = React.useCallback(async () => {
     if (!user) return;
@@ -81,6 +92,9 @@ const AdminPanel = () => {
         studentsRes,
         pendingRes,
         regsRes,
+        upcomingEventsRes,
+        pendingRegsRes,
+        reviewsRes,
       ] = await Promise.all([
         axios.get(`/api/v1/users?page=${usersPage}&limit=10`),
         axios.get(`/api/v1/events?page=${eventsPage}&limit=10&sort=-createdAt`),
@@ -91,6 +105,11 @@ const AdminPanel = () => {
         axios.get(
           `/api/v1/registrations/admin?page=${registrationsPage}&limit=10`,
         ),
+        axios.get(
+          `/api/v1/events?endDate[gt]=${new Date().toISOString()}&limit=1`,
+        ),
+        axios.get(`/api/v1/registrations/admin?status=pending&limit=1`),
+        axios.get(`/api/v1/reviews/admin/all?page=${reviewsPage}&limit=10`),
       ]);
       setUsersData(usersRes.data.data.users);
       setUsersTotal(Math.ceil(usersRes.data.totalResults / 10));
@@ -110,17 +129,20 @@ const AdminPanel = () => {
 
       setRegistrationsData(regsRes.data.data.registrations);
       setRegistrationsTotal(Math.ceil(regsRes.data.totalResults / 10));
-      setPendingRegistrationsCount(
-        regsRes.data.data.registrations.filter((r) => r.status === "pending")
-          .length,
-      );
+      setTotalRegistrationsCount(regsRes.data.totalResults);
+      setUpcomingEventsCount(upcomingEventsRes.data.totalResults);
+      setPendingRegistrationsCount(pendingRegsRes.data.totalResults);
+
+      // Handle Reviews
+      setReviewsData(reviewsRes.data.data.reviews);
+      setReviewsTotal(Math.ceil(reviewsRes.data.results / 10));
     } catch (err) {
       console.error(err);
       toast.error("Failed to load admin data");
     } finally {
       setLoading(false);
     }
-  }, [user, usersPage, eventsPage, logsPage, registrationsPage]);
+  }, [user, usersPage, eventsPage, logsPage, registrationsPage, reviewsPage]);
 
   const handleUpdateUserStatus = async (userId, newStatus) => {
     try {
@@ -169,7 +191,8 @@ const AdminPanel = () => {
   };
 
   const handleVerifyAttendance = async () => {
-    if (!verificationCode) return toast.error("Please enter a verification code");
+    if (!verificationCode)
+      return toast.error("Please enter a verification code");
     setIsVerifying(true);
     try {
       await axios.post("/api/v1/registrations/verify-attendance", {
@@ -185,6 +208,7 @@ const AdminPanel = () => {
     }
   };
 
+
   const handleIssueCertificate = async (regId) => {
     setIssuingCertId(regId);
     try {
@@ -192,7 +216,9 @@ const AdminPanel = () => {
       toast.success("Certificate issued and sent to student!");
       fetchAdminData();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to issue certificate");
+      toast.error(
+        error.response?.data?.message || "Failed to issue certificate",
+      );
     } finally {
       setIssuingCertId(null);
     }
@@ -212,7 +238,7 @@ const AdminPanel = () => {
     }
   };
 
-  const handleExport = async (eventId, eventTitle, format = 'csv') => {
+  const handleExport = async (eventId, eventTitle, format = "csv") => {
     setExportingId(`${eventId}-${format}`);
     try {
       const response = await axios.get(
@@ -220,20 +246,20 @@ const AdminPanel = () => {
         {
           responseType: "blob",
           withCredentials: true,
-        }
+        },
       );
 
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
-      
-      let extension = 'csv';
-      if (format === 'xlsx') extension = 'xlsx';
-      if (format === 'pdf') extension = 'pdf';
+
+      let extension = "csv";
+      if (format === "xlsx") extension = "xlsx";
+      if (format === "pdf") extension = "pdf";
 
       link.setAttribute(
         "download",
-        `${eventTitle.replace(/\s+/g, "_")}_participants.${extension}`
+        `${eventTitle.replace(/\s+/g, "_")}_participants.${extension}`,
       );
       document.body.appendChild(link);
       link.click();
@@ -242,7 +268,20 @@ const AdminPanel = () => {
       toast.success(`Exported as ${format.toUpperCase()}`);
     } catch (err) {
       console.error(err);
-      toast.error("Export failed. Please try again.");
+      if (err.response?.data instanceof Blob) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const errorData = JSON.parse(reader.result);
+            toast.error(errorData.message || "Export failed. Please try again.");
+          } catch {
+            toast.error("Export failed. Please try again.");
+          }
+        };
+        reader.readAsText(err.response.data);
+      } else {
+        toast.error(err.response?.data?.message || "Export failed. Please try again.");
+      }
     } finally {
       setExportingId(null);
     }
@@ -289,19 +328,17 @@ const AdminPanel = () => {
             );
             setRegistrationsData(res.data.data.registrations);
             setRegistrationsTotal(Math.ceil(res.data.totalResults / 10));
-            setPendingRegistrationsCount(
-              res.data.data.registrations.filter((r) => r.status === "pending")
-                .length,
-            );
           }
           // Always refresh recent logs and global states
-          const [rLogRes, sRes, pRes] = await Promise.all([
+          const [rLogRes, sRes, pRes, pRegRes] = await Promise.all([
             axios.get(`/api/v1/logs?limit=5`),
             axios.get(`/api/v1/users?role=student&limit=1`),
             axios.get(`/api/v1/users?status=pending&limit=1`),
+            axios.get(`/api/v1/registrations/admin?status=pending&limit=1`),
           ]);
           setRecentLogs(rLogRes.data.data.logs);
           setTotalStudents(sRes.data.totalResults);
+          setPendingRegistrationsCount(pRegRes.data.totalResults);
           if (user.role === "superAdmin") {
             setPendingUsersCount(pRes.data.totalResults);
           }
@@ -312,7 +349,17 @@ const AdminPanel = () => {
       refreshCurrentTab();
     }, 5000);
     return () => clearInterval(interval);
-  }, [activeTab, usersPage, eventsPage, logsPage, registrationsPage, authLoading, fetchAdminData, navigate, user]);
+  }, [
+    activeTab,
+    usersPage,
+    eventsPage,
+    logsPage,
+    registrationsPage,
+    authLoading,
+    fetchAdminData,
+    navigate,
+    user,
+  ]);
 
   if (authLoading || !user) {
     return (
@@ -337,17 +384,13 @@ const AdminPanel = () => {
     },
     {
       title: "Upcoming Events",
-      value: loading
-        ? "..."
-        : eventsData
-            .filter((e) => new Date(e.startDate) > new Date())
-            .length.toString(),
+      value: loading ? "..." : upcomingEventsCount.toString(),
       trend: { value: 23, label: "this week" },
       icon: ClockIcon,
     },
     {
       title: "Total Registrations",
-      value: "842",
+      value: loading ? "..." : totalRegistrationsCount.toString(),
       trend: { value: 15, label: "vs last month" },
       icon: CheckCircleIcon,
     },
@@ -700,145 +743,161 @@ const AdminPanel = () => {
             <div className="rounded-[2.5rem] border border-secondary-100 shadow-xl bg-white overflow-visible">
               <div className="overflow-x-auto rounded-[2.5rem]">
                 <table className="w-full text-left border-collapse min-h-[150px]">
-                <thead className="bg-secondary-50/50 text-[10px] font-black text-secondary-400 uppercase tracking-[0.2em]">
-                  <tr>
-                    <th className="px-8 py-6 border-b border-secondary-100">
-                      Event
-                    </th>
-                    <th className="px-8 py-6 border-b border-secondary-100">
-                      Host
-                    </th>
-                    <th className="px-8 py-6 border-b border-secondary-100">
-                      Launch Date
-                    </th>
-                    <th className="px-8 py-6 border-b border-secondary-100">
-                      Global Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-secondary-50">
-                  {eventsData.map((e) => (
-                    <tr
-                      key={e._id}
-                      className="hover:bg-secondary-50/30 transition-colors group"
-                    >
-                      <td className="px-8 py-6">
-                        <div className="flex items-center gap-5">
-                          <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-lg flex-shrink-0 border border-secondary-100 group-hover:rotate-3 transition-transform">
-                            <img
-                              src={e.image || getCategoryImage(e.category)}
-                              alt={e.title}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div>
-                            <div className="font-black text-sm text-secondary-900 leading-tight uppercase tracking-tight">
-                              {e.title}
+                  <thead className="bg-secondary-50/50 text-[10px] font-black text-secondary-400 uppercase tracking-[0.2em]">
+                    <tr>
+                      <th className="px-8 py-6 border-b border-secondary-100">
+                        Event
+                      </th>
+                      <th className="px-8 py-6 border-b border-secondary-100">
+                        Host
+                      </th>
+                      <th className="px-8 py-6 border-b border-secondary-100">
+                        Launch Date
+                      </th>
+                      <th className="px-8 py-6 border-b border-secondary-100">
+                        Global Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-secondary-50">
+                    {eventsData.map((e) => (
+                      <tr
+                        key={e._id}
+                        className="hover:bg-secondary-50/30 transition-colors group"
+                      >
+                        <td className="px-8 py-6">
+                          <div className="flex items-center gap-5">
+                            <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-lg flex-shrink-0 border border-secondary-100 group-hover:rotate-3 transition-transform">
+                              <img
+                                src={e.image || getCategoryImage(e.category)}
+                                alt={e.title}
+                                className="w-full h-full object-cover"
+                              />
                             </div>
-                            <div className="text-[9px] text-primary-500 font-black uppercase tracking-widest mt-2">
-                              {e.category}
+                            <div>
+                              <div className="font-black text-sm text-secondary-900 leading-tight uppercase tracking-tight">
+                                {e.title}
+                              </div>
+                              <div className="text-[9px] text-primary-500 font-black uppercase tracking-widest mt-2">
+                                {e.category}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-8 py-6">
-                        <div className="text-xs font-black text-secondary-900 leading-tight uppercase tracking-tight">
-                          {e.collegeId?.name || "Hub Admin"}
-                        </div>
-                        <div className="text-[9px] text-secondary-400 font-bold uppercase mt-1 tracking-widest">
-                          {e.collegeId?.college}
-                        </div>
-                      </td>
-                      <td className="px-8 py-6 text-[11px] font-black text-purple-600 italic tracking-widest">
-                        {new Date(e.startDate).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "2-digit",
-                          year: "numeric",
-                        })}
-                      </td>
-                      <td className="px-8 py-6">
-                        <div className="flex items-center gap-4">
-                          <span
-                            className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border ${
-                              new Date() > new Date(e.endDate)
-                                ? "bg-red-50 text-red-600 border-red-100"
-                                : "bg-success/5 text-success border border-success/10"
-                            }`}
-                          >
-                            {new Date() > new Date(e.endDate)
-                              ? "Completed"
-                              : "Active"}
-                          </span>
-                          {(user.role === "superAdmin" ||
-                            e.collegeId?._id === user._id) && (
-                            <>
-                          <div className="relative group/export">
-                                <button
-                                  className="flex items-center gap-2 px-3 py-1.5 bg-secondary-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md group-hover/export:shadow-lg"
-                                >
-                                  <DocumentArrowDownIcon className="w-4 h-4" />
-                                  Export
-                                  <ChevronDownIcon className="w-3 h-3 ml-1" />
-                                </button>
-                                
-                                <div className="absolute right-0 top-full pt-1 invisible opacity-0 group-hover/export:visible group-hover/export:opacity-100 z-[100] transition-all duration-200">
-                                  <div className="w-32 bg-white rounded-2xl shadow-2xl border border-secondary-100 py-2 animate-in fade-in slide-in-from-top-2">
-                                    <button
-                                      onClick={() => handleExport(e._id, e.title, 'csv')}
-                                      disabled={exportingId === `${e._id}-csv`}
-                                      className="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest text-secondary-600 hover:bg-secondary-50 hover:text-primary-600 transition-colors flex items-center gap-2 disabled:opacity-50"
-                                    >
-                                      <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                                      {exportingId === `${e._id}-csv` ? "..." : "CSV"}
-                                    </button>
-                                    <button
-                                      onClick={() => handleExport(e._id, e.title, 'xlsx')}
-                                      disabled={exportingId === `${e._id}-xlsx`}
-                                      className="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest text-secondary-600 hover:bg-secondary-50 hover:text-green-600 transition-colors flex items-center gap-2 disabled:opacity-50"
-                                    >
-                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                                      {exportingId === `${e._id}-xlsx` ? "..." : "Excel"}
-                                    </button>
-                                    <button
-                                      onClick={() => handleExport(e._id, e.title, 'pdf')}
-                                      disabled={exportingId === `${e._id}-pdf`}
-                                      className="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest text-secondary-600 hover:bg-secondary-50 hover:text-red-600 transition-colors flex items-center gap-2 disabled:opacity-50"
-                                    >
-                                      <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-                                      {exportingId === `${e._id}-pdf` ? "..." : "PDF"}
-                                    </button>
+                        </td>
+                        <td className="px-8 py-6">
+                          <div className="text-xs font-black text-secondary-900 leading-tight uppercase tracking-tight">
+                            {e.collegeId?.name || "Hub Admin"}
+                          </div>
+                          <div className="text-[9px] text-secondary-400 font-bold uppercase mt-1 tracking-widest">
+                            {e.collegeId?.college}
+                          </div>
+                        </td>
+                        <td className="px-8 py-6 text-[11px] font-black text-purple-600 italic tracking-widest">
+                          {new Date(e.startDate).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "2-digit",
+                            year: "numeric",
+                          })}
+                        </td>
+                        <td className="px-8 py-6">
+                          <div className="flex items-center gap-4">
+                            <span
+                              className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border ${
+                                new Date() > new Date(e.endDate)
+                                  ? "bg-red-50 text-red-600 border-red-100"
+                                  : "bg-success/5 text-success border border-success/10"
+                              }`}
+                            >
+                              {new Date() > new Date(e.endDate)
+                                ? "Completed"
+                                : "Active"}
+                            </span>
+                            {(user.role === "superAdmin" ||
+                              e.collegeId?._id === user._id) && (
+                              <>
+                                <div className="relative group/export">
+                                  <button className="flex items-center gap-2 px-3 py-1.5 bg-secondary-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md group-hover/export:shadow-lg">
+                                    <DocumentArrowDownIcon className="w-4 h-4" />
+                                    Export
+                                    <ChevronDownIcon className="w-3 h-3 ml-1" />
+                                  </button>
+
+                                  <div className="absolute right-0 top-full pt-1 invisible opacity-0 group-hover/export:visible group-hover/export:opacity-100 z-[100] transition-all duration-200">
+                                    <div className="w-32 bg-white rounded-2xl shadow-2xl border border-secondary-100 py-2 animate-in fade-in slide-in-from-top-2">
+                                      <button
+                                        onClick={() =>
+                                          handleExport(e._id, e.title, "csv")
+                                        }
+                                        disabled={
+                                          exportingId === `${e._id}-csv`
+                                        }
+                                        className="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest text-secondary-600 hover:bg-secondary-50 hover:text-primary-600 transition-colors flex items-center gap-2 disabled:opacity-50"
+                                      >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                                        {exportingId === `${e._id}-csv`
+                                          ? "..."
+                                          : "CSV"}
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          handleExport(e._id, e.title, "xlsx")
+                                        }
+                                        disabled={
+                                          exportingId === `${e._id}-xlsx`
+                                        }
+                                        className="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest text-secondary-600 hover:bg-secondary-50 hover:text-green-600 transition-colors flex items-center gap-2 disabled:opacity-50"
+                                      >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                        {exportingId === `${e._id}-xlsx`
+                                          ? "..."
+                                          : "Excel"}
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          handleExport(e._id, e.title, "pdf")
+                                        }
+                                        disabled={
+                                          exportingId === `${e._id}-pdf`
+                                        }
+                                        className="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-widest text-secondary-600 hover:bg-secondary-50 hover:text-red-600 transition-colors flex items-center gap-2 disabled:opacity-50"
+                                      >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                        {exportingId === `${e._id}-pdf`
+                                          ? "..."
+                                          : "PDF"}
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingEvent(e);
-                                  setIsEditModalOpen(true);
-                                }}
-                                className="p-2 border border-secondary-100 rounded-xl hover:bg-primary-50 text-primary-600 transition-all ml-2"
-                              >
-                                <PencilSquareIcon className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteEvent(e._id)}
-                                className="p-2 border border-secondary-100 rounded-xl hover:bg-red-50 text-red-600 transition-all ml-2"
-                              >
-                                <TrashIcon className="w-4 h-4" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingEvent(e);
+                                    setIsEditModalOpen(true);
+                                  }}
+                                  className="p-2 border border-secondary-100 rounded-xl hover:bg-primary-50 text-primary-600 transition-all ml-2"
+                                >
+                                  <PencilSquareIcon className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteEvent(e._id)}
+                                  className="p-2 border border-secondary-100 rounded-xl hover:bg-red-50 text-red-600 transition-all ml-2"
+                                >
+                                  <TrashIcon className="w-4 h-4" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
             {/* Event Pagination */}
             <div className="flex justify-between items-center px-4">
               <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">
@@ -884,12 +943,14 @@ const AdminPanel = () => {
                 </div>
                 <div className="flex gap-2">
                   <div className="relative">
-                    <QrCodeIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                    <TicketIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
                     <input
                       type="text"
                       placeholder="ENTER CODE (E.G. AB12CD)"
                       value={verificationCode}
-                      onChange={(e) => setVerificationCode(e.target.value.toUpperCase())}
+                      onChange={(e) =>
+                        setVerificationCode(e.target.value.toUpperCase())
+                      }
                       className="pl-11 pr-4 py-3 bg-secondary-50 border border-secondary-100 rounded-2xl text-xs font-black uppercase tracking-widest focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all w-full md:w-64"
                       maxLength={6}
                     />
@@ -1039,15 +1100,24 @@ const AdminPanel = () => {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleIssueCertificate(reg._id)}
-                              disabled={reg.isCertificateIssued || issuingCertId === reg._id}
+                              disabled={
+                                reg.isCertificateIssued ||
+                                issuingCertId === reg._id
+                              }
                               className={`p-2 rounded-xl ${
                                 reg.isCertificateIssued
                                   ? "text-blue-400"
                                   : "text-blue-600 hover:bg-blue-50"
                               }`}
-                              title={reg.isCertificateIssued ? "Certificate Issued" : "Issue Certificate"}
+                              title={
+                                reg.isCertificateIssued
+                                  ? "Certificate Issued"
+                                  : "Issue Certificate"
+                              }
                             >
-                              <AcademicCapIcon className={`w-4 h-4 ${issuingCertId === reg._id ? 'animate-bounce' : ''}`} />
+                              <AcademicCapIcon
+                                className={`w-4 h-4 ${issuingCertId === reg._id ? "animate-bounce" : ""}`}
+                              />
                             </Button>
                           )}
                           <Button
@@ -1202,6 +1272,75 @@ const AdminPanel = () => {
             </div>
           </div>
         );
+      case "Reviews":
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-6">
+              {reviewsData.length > 0 ? (
+                reviewsData.map((review) => (
+                  <Card key={review._id} className="p-6 border-secondary-100 rounded-3xl bg-white shadow-sm flex flex-col md:flex-row gap-6">
+                    <div className="w-full md:w-32 h-32 rounded-2xl bg-primary-50 flex items-center justify-center text-primary-600 flex-shrink-0">
+                      <StarIconSolid className="w-12 h-12" />
+                    </div>
+                    <div className="flex-grow">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h4 className="font-black text-secondary-900 text-lg uppercase tracking-tight">
+                            {review.event?.title || "Unknown Event"}
+                          </h4>
+                          <p className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mt-1">
+                            By: {review.user?.name} ({review.user?.college})
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-bold text-secondary-400 italic">
+                          {formatDistanceToNow(new Date(review.createdAt), { addSuffix: true })}
+                        </span>
+                      </div>
+                      <div className="flex gap-1 mb-4">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <StarIconSolid key={s} className={`w-4 h-4 ${s <= review.rating ? "text-yellow-400" : "text-secondary-100"}`} />
+                        ))}
+                      </div>
+                      <p className="text-secondary-600 text-sm leading-relaxed border-l-4 border-primary-500 pl-4 py-2 bg-secondary-50 rounded-r-xl italic">
+                        "{review.comment}"
+                      </p>
+                    </div>
+                  </Card>
+                ))
+              ) : (
+                <div className="text-center py-20 bg-secondary-50 rounded-[3rem] border-2 border-dashed border-secondary-200">
+                   <StarIcon className="w-16 h-16 text-secondary-200 mx-auto mb-6" />
+                   <p className="text-secondary-400 font-bold italic uppercase tracking-widest">No event reviews found</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Pagination for Reviews */}
+            {reviewsTotal > 1 && (
+               <div className="flex items-center justify-between mt-8 px-6">
+                 <Button
+                   variant="ghost"
+                   disabled={reviewsPage === 1}
+                   onClick={() => setReviewsPage(p => p - 1)}
+                   className="text-[10px] font-black uppercase tracking-widest"
+                 >
+                   ← Previous
+                 </Button>
+                 <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">
+                   Page {reviewsPage} of {reviewsTotal}
+                 </span>
+                 <Button
+                   variant="ghost"
+                   disabled={reviewsPage === reviewsTotal}
+                   onClick={() => setReviewsPage(p => p + 1)}
+                   className="text-[10px] font-black uppercase tracking-widest"
+                 >
+                   Next →
+                 </Button>
+               </div>
+            )}
+          </div>
+        );
       default:
         return (
           <div className="p-20 text-center font-bold text-secondary-400">
@@ -1213,7 +1352,7 @@ const AdminPanel = () => {
 
   return (
     <div className="min-h-screen bg-secondary-50 pb-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-12 py-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">
           <div>
             <h1 className="text-4xl font-black text-secondary-900 tracking-tight">
@@ -1243,6 +1382,7 @@ const AdminPanel = () => {
                 "User Management",
                 "Event Management",
                 "Registrations",
+                "Reviews",
                 "Admin Logs",
               ]
                 .filter((tab) => {

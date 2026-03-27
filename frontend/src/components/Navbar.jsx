@@ -10,7 +10,6 @@ import { BellIcon as SolidBellIcon } from "@heroicons/react/24/solid";
 import AuthContext from "../context/AuthContext";
 import Button from "./ui/Button";
 import axios from "axios";
-import { toast } from "react-toastify";
 
 const NavLink = ({ to, children }) => {
   const location = useLocation();
@@ -73,11 +72,14 @@ const Navbar = () => {
   // Fetch admin notifications
   useEffect(() => {
     const fetchNotifications = async () => {
-      if (user && (user.role === "collegeAdmin" || user.role === "superAdmin")) {
+      if (
+        user &&
+        (user.role === "collegeAdmin" || user.role === "superAdmin")
+      ) {
         try {
           const res = await axios.get("/api/v1/registrations/admin");
           setNotifications(res.data.data.registrations);
-        } catch (error) {
+        } catch {
           console.error("Failed to fetch notifications");
         }
       }
@@ -97,12 +99,12 @@ const Navbar = () => {
   const markAsRead = async (registrationId) => {
     try {
       await axios.patch(`/api/v1/registrations/${registrationId}/read`);
-      setNotifications(prev =>
-        prev.map(notif =>
-          notif._id === registrationId ? { ...notif, isRead: true } : notif
-        )
+      setNotifications((prev) =>
+        prev.map((notif) =>
+          notif._id === registrationId ? { ...notif, isRead: true } : notif,
+        ),
       );
-    } catch (error) {
+    } catch {
       console.error("Failed to mark notification as read");
     }
   };
@@ -112,20 +114,20 @@ const Navbar = () => {
     setIsProfileOpen(false); // Close profile if open
   };
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return (
-    <nav className="bg-white border-b border-secondary-200 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <nav className="bg-white/80 backdrop-blur-md border-b border-secondary-100 sticky top-0 z-50">
+      <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-12">
         <div className="flex justify-between h-16 items-center">
           {/* Left Side: Logo and Links */}
           <div className="flex items-center space-x-8">
             <Link to="/" className="flex items-center gap-2.5 group">
-              <div className="w-9 h-9 bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl flex items-center justify-center text-white shadow-md group-hover:shadow-lg transition-all duration-300 transform group-hover:-rotate-3">
+              <div className="w-9 h-9 bg-primary-600 rounded-xl flex items-center justify-center text-white shadow-md group-hover:shadow-lg transition-all duration-300 transform group-hover:-rotate-3">
                 <RocketLaunchIcon className="w-5 h-5" />
               </div>
-              <span className="text-lg font-bold text-secondary-900 tracking-tight">
-                CampusEventHub
+              <span className="text-xl font-black text-secondary-900 tracking-tighter uppercase italic">
+                CAMPUS <span className="text-primary-600">PULSE</span>
               </span>
             </Link>
 
@@ -145,9 +147,9 @@ const Navbar = () => {
           <div className="flex items-center space-x-4">
             {user ? (
               <div className="flex items-center gap-4">
-                
                 {/* Notification Bell */}
-                {(user.role === "collegeAdmin" || user.role === "superAdmin") && (
+                {(user.role === "collegeAdmin" ||
+                  user.role === "superAdmin") && (
                   <div className="relative" ref={notificationRef}>
                     <button
                       onClick={handleNotificationClick}
@@ -167,7 +169,9 @@ const Navbar = () => {
                     {isNotificationsOpen && (
                       <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-xl border border-secondary-100 transform origin-top-right overflow-hidden z-50 transition-all max-h-[85vh] flex flex-col">
                         <div className="px-4 py-3 border-b border-secondary-100 bg-secondary-50 flex items-center justify-between sticky top-0">
-                          <h3 className="text-sm font-bold text-secondary-900">Notifications</h3>
+                          <h3 className="text-sm font-bold text-secondary-900">
+                            Notifications
+                          </h3>
                           {unreadCount > 0 && (
                             <span className="bg-primary-100 text-primary-700 text-xs font-bold px-2 py-0.5 rounded-full">
                               {unreadCount} new
@@ -184,15 +188,35 @@ const Navbar = () => {
                               {notifications.map((notif) => (
                                 <div
                                   key={notif._id}
-                                  onClick={() => !notif.isRead && markAsRead(notif._id)}
-                                  className={`px-4 py-3 cursor-pointer transition-colors ${notif.isRead ? 'bg-white opacity-70' : 'bg-primary-50/30 hover:bg-primary-50/50'}`}
+                                  onClick={() =>
+                                    !notif.isRead && markAsRead(notif._id)
+                                  }
+                                  className={`px-4 py-3 cursor-pointer transition-colors ${notif.isRead ? "bg-white opacity-70" : "bg-primary-50/30 hover:bg-primary-50/50"}`}
                                 >
                                   <p className="text-sm text-secondary-900 font-medium leading-snug">
-                                    <span className="font-bold text-primary-700">{notif.studentId?.name}</span> registered for <span className="font-bold">{notif.eventId?.title}</span>
+                                    <span className="font-bold text-primary-700">
+                                      {notif.studentId?.name}
+                                    </span>{" "}
+                                    registered for{" "}
+                                    <span className="font-bold">
+                                      {notif.eventId?.title}
+                                    </span>
                                   </p>
                                   <p className="text-xs text-secondary-500 mt-1 flex items-center justify-between">
-                                    <span>{new Date(notif.createdAt).toLocaleDateString()} {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute:'2-digit' })}</span>
-                                    {!notif.isRead && <span className="w-2 h-2 rounded-full bg-primary-500"></span>}
+                                    <span>
+                                      {new Date(
+                                        notif.createdAt,
+                                      ).toLocaleDateString()}{" "}
+                                      {new Date(
+                                        notif.createdAt,
+                                      ).toLocaleTimeString([], {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
+                                    </span>
+                                    {!notif.isRead && (
+                                      <span className="w-2 h-2 rounded-full bg-primary-500"></span>
+                                    )}
                                   </p>
                                 </div>
                               ))}
@@ -207,8 +231,8 @@ const Navbar = () => {
                 <div className="relative" ref={profileRef}>
                   <button
                     onClick={() => {
-                        setIsProfileOpen(!isProfileOpen);
-                        setIsNotificationsOpen(false);
+                      setIsProfileOpen(!isProfileOpen);
+                      setIsNotificationsOpen(false);
                     }}
                     className="flex items-center gap-3 p-1 rounded-full hover:bg-secondary-50 transition-colors border border-transparent focus:border-secondary-200 focus:ring-2 focus:ring-primary-100"
                   >

@@ -45,7 +45,11 @@ exports.getAdminRegistrations = catchAsync(async (req, res, next) => {
   }
 
   // For collegeAdmins, show only their registrations. For superAdmins, show all.
-  const filter = {};
+  const filter = { ...req.query };
+  delete filter.page;
+  delete filter.limit;
+  delete filter.sort;
+
   if (req.user.role === 'collegeAdmin') {
     filter.adminId = req.user.id;
   }

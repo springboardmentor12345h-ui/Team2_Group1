@@ -12,6 +12,8 @@ import {
   ArrowDownTrayIcon,
   AcademicCapIcon,
   CheckCircleIcon,
+  XMarkIcon,
+  EyeIcon,
 } from "@heroicons/react/24/outline";
 import axios from "axios";
 import AuthContext from "../context/AuthContext";
@@ -30,20 +32,85 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [regCount, setRegCount] = useState(0);
   const [registrations, setRegistrations] = useState([]);
+  const [totalEventsCount, setTotalEventsCount] = useState(0);
+  const [upcomingEventsCount, setUpcomingEventsCount] = useState(0);
   const [activeTab, setActiveTab] = useState("Upcoming");
   const [unreadCount, setUnreadCount] = useState(0);
   const [hasNewEvents, setHasNewEvents] = useState(false);
   const notifiedRegs = useRef(new Set());
+  const attendedCount = registrations.filter(
+    (r) => r.attendanceStatus === "present",
+  ).length;
 
   // Modal State
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  const handleDownloadAdmitCard = async (regId) => {
+    try {
+      const response = await axios.get(
+        `/api/v1/registrations/${regId}/download-admit-card`,
+        { responseType: "blob" },
+      );
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `AdmitCard_${regId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Admit card downloaded!");
+      
+      // Mark as read after download
+      await axios.patch(`/api/v1/registrations/${regId}/student-read`);
+      fetchDashboardData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Download failed");
+    }
+  };
+
+  const handleDownloadCertificate = async (regId) => {
+    try {
+      const response = await axios.get(
+        `/api/v1/registrations/${regId}/download-certificate`,
+        { responseType: "blob" },
+      );
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Certificate_${regId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Certificate downloaded!");
+
+      // Mark as read after download
+      await axios.patch(`/api/v1/registrations/${regId}/student-read`);
+      fetchDashboardData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Download failed");
+    }
+  };
+
+  useEffect(() => {
+    if (!user) {
+      navigate("/login");
+    }
+  }, [user, navigate]);
 
   const fetchDashboardData = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
     try {
-      // Fetch events (accessible to all)
-      const eventsRes = await axios.get("/api/v1/events?sort=startDate");
+      // Fetch events
+      let eventsUrl = "/api/v1/events?sort=startDate&limit=100";
+      if (user.role === "collegeAdmin") {
+        eventsUrl += `&collegeId=${user._id || user.id}`;
+      }
+      const eventsRes = await axios.get(eventsUrl);
 
       // Sort in frontend: Upcoming first (ASC), then Completed (DESC)
       const sortedEvents = [...eventsRes.data.data.events].sort((a, b) => {
@@ -61,8 +128,14 @@ const Dashboard = () => {
       });
 
       setUpcomingEvents(sortedEvents);
+      setTotalEventsCount(eventsRes.data.totalResults);
+      setUpcomingEventsCount(
+        eventsRes.data.data.events.filter(
+          (e) => new Date(e.endDate) > new Date(),
+        ).length,
+      );
 
-      // Check for new events since last viewed
+      // Check for new events
       if (user.role === "student" && user.lastViewedEventsAt) {
         const hasNew = sortedEvents.some(
           (e) => new Date(e.createdAt) > new Date(user.lastViewedEventsAt),
@@ -70,7 +143,7 @@ const Dashboard = () => {
         setHasNewEvents(hasNew);
       }
 
-      // Only fetch logs if user is an admin
+      // Fetch logs for admins
       if (user.role === "collegeAdmin" || user.role === "superAdmin") {
         try {
           const logsRes = await axios.get(`/api/v1/logs?limit=3`);
@@ -81,81 +154,58 @@ const Dashboard = () => {
         }
       }
 
-      // Fetch registrations count
-      try {
-        if (user.role === "student") {
-          const res = await axios.get("/api/v1/registrations/my-registrations");
-          setRegCount(res.data.results);
-          setRegistrations(res.data.data.registrations);
+      // Fetch registrations
+      if (user.role === "student") {
+        const res = await axios.get("/api/v1/registrations/my-registrations");
+        setRegCount(res.data.results);
+        setRegistrations(res.data.data.registrations);
+        setUnreadCount(
+          res.data.data.registrations.filter((r) => !r.isStudentRead).length,
+        );
 
-          const unread = res.data.data.registrations.filter(
-            (r) => !r.isStudentRead,
-          ).length;
-          setUnreadCount(unread);
-
-          // Handle notifications for students once
-          const unreadRegs = res.data.data.registrations.filter(
-            (r) => !r.isStudentRead,
-          );
-          unreadRegs.forEach((reg) => {
-            if (!notifiedRegs.current.has(reg._id)) {
-              if (reg.isCertificateIssued) {
-                toast.success(
-                  `Congratulations! Your certificate for "${reg.eventId?.title || "Event"}" has been issued!`,
-                  {
-                    position: "top-right",
-                    autoClose: 6000,
-                    icon: "🎓",
-                  },
-                );
-              } else if (reg.status !== "pending") {
-                toast.info(
-                  `Update: Your registration for "${reg.eventId?.title || "Event"}" has been ${reg.status}!`,
-                  {
-                    position: "top-right",
-                    autoClose: 5000,
-                    icon: reg.status === "approved" ? "✅" : "❌",
-                  },
-                );
-              }
-              notifiedRegs.current.add(reg._id);
+        // Handle notifications for students once
+        const unreadRegs = res.data.data.registrations.filter(
+          (r) => !r.isStudentRead,
+        );
+        unreadRegs.forEach((reg) => {
+          const notificationKey = `${reg._id}-${reg.isCertificateIssued ? "cert" : reg.status}`;
+          if (!notifiedRegs.current.has(notificationKey)) {
+            if (reg.isCertificateIssued) {
+              toast.success(
+                `Congratulations! Your certificate for "${reg.eventId?.title || "Event"}" has been issued!`,
+                {
+                  position: "top-right",
+                  autoClose: 6000,
+                  icon: "🎓",
+                },
+              );
+            } else if (reg.status !== "pending") {
+              toast.info(
+                `Update: Your registration for "${reg.eventId?.title || "Event"}" has been ${reg.status}!`,
+                {
+                  position: "top-right",
+                  autoClose: 5000,
+                  icon: reg.status === "approved" ? "✅" : "❌",
+                },
+              );
             }
-          });
-
-          // Use real activities for students too
-          const studentActivities = res.data.data.registrations
-            .slice(0, 3)
-            .map((reg) => ({
-              action: reg.isCertificateIssued
-                ? `Certificate issued for "${reg.eventId?.title || "Unknown Event"}"`
-                : `Your registration for "${reg.eventId?.title || "Unknown Event"}" is ${reg.status}`,
-              timestamp: reg.createdAt,
-              status: reg.status,
-            }));
-
-          if (studentActivities.length > 0) {
-            setActivities(studentActivities);
+            notifiedRegs.current.add(notificationKey);
           }
-        } else {
-          const res = await axios.get("/api/v1/registrations/admin");
-          setRegCount(res.data.results);
+        });
 
-          // Notify admin about new pending registrations
-          const pendingCount = res.data.data.registrations.filter(
-            (r) => r.status === "pending" && !r.isRead,
-          ).length;
-          if (pendingCount > 0) {
-            toast.info(
-              `You have ${pendingCount} new pending event registrations to review.`,
-              {
-                icon: "📩",
-                position: "bottom-right",
-              },
-            );
-          }
-        }
-      } catch (regError) {
-        console.error("Registration fetch failed", regError);
+        // Map student activities
+        const studentActivities = res.data.data.registrations
+          .slice(0, 3)
+          .map((reg) => ({
+            action: reg.isCertificateIssued
+              ? `Certificate issued for "${reg.eventId?.title}"`
+              : `Registration for "${reg.eventId?.title}" is ${reg.status}`,
+            timestamp: reg.createdAt,
+          }));
+        setActivities(studentActivities);
+      } else {
+        const res = await axios.get("/api/v1/registrations/admin");
+        setRegCount(res.data.totalResults);
       }
     } catch (error) {
       console.error("Dashboard fetch error:", error);
@@ -166,65 +216,41 @@ const Dashboard = () => {
   }, [user]);
 
   useEffect(() => {
-    if (user) {
-      fetchDashboardData();
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
-      // Notification for Super Admin about pending approvals
-      if (user.role === "superAdmin") {
-        const checkPendingUsers = async () => {
-          try {
-            const hasShown = sessionStorage.getItem("hasShownPendingToast");
-            if (!hasShown) {
-              sessionStorage.setItem("hasShownPendingToast", "true");
-              const res = await axios.get(
-                "/api/v1/users?status=pending&limit=1",
-              );
-              if (res.data.totalResults > 0) {
-                toast.info(
-                  `Attention: There are ${res.data.totalResults} pending college admin registrations awaiting approval.`,
-                  {
-                    position: "top-center",
-                    autoClose: 10000,
-                    icon: "🔔",
-                  },
-                );
-              }
-            }
-          } catch (err) {
-            console.error("Pending users check failed:", err);
-          }
-        };
-        checkPendingUsers();
-      }
-    }
-  }, [user, fetchDashboardData]);
-
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary-50">
-        <div className="text-center">
-          <p className="text-secondary-600 mb-4">
-            Please login to view dashboard.
-          </p>
-          <Button onClick={() => navigate("/login")}>Go to Login</Button>
-        </div>
-      </div>
-    );
-  }
+  if (!user) return null;
 
   const handleEventClick = (event) => {
     setSelectedEvent(event);
     setIsDetailsOpen(true);
   };
 
-  const getCategoryColor = (category) => {
+  const getCategoryColor = (cat) => {
     const colors = {
       Hackathon: "bg-blue-100 text-blue-700",
       Cultural: "bg-purple-100 text-purple-700",
       Workshop: "bg-green-100 text-green-700",
       Sports: "bg-orange-100 text-orange-700",
     };
-    return colors[category] || "bg-gray-100 text-gray-700";
+    return colors[cat] || "bg-gray-100 text-gray-700";
+  };
+
+  const getCategoryImage = (cat) => {
+    const images = {
+      Hackathon:
+        "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800&auto=format&fit=crop",
+      Cultural:
+        "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=800&auto=format&fit=crop",
+      Sports:
+        "https://images.unsplash.com/photo-1504450758481-7338eba7524a?w=800&auto=format&fit=crop",
+      Workshop:
+        "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=800&auto=format&fit=crop",
+    };
+    return (
+      images[cat] ||
+      "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=800&auto=format&fit=crop"
+    );
   };
 
   const getTimeAgo = (date) => {
@@ -237,132 +263,16 @@ const Dashboard = () => {
     return new Date(date).toLocaleDateString();
   };
 
-  const getGoogleCalendarUrl = (event) => {
-    const formatTime = (date) =>
-      new Date(date).toISOString().replace(/-|:|\.\d+/g, "");
-    const start = formatTime(event.startDate);
-    // End date might not exist in all events, default to +1 hour if missing
-    const end = event.endDate
-      ? formatTime(event.endDate)
-      : formatTime(
-          new Date(new Date(event.startDate).getTime() + 60 * 60 * 1000),
-        );
-
-    const params = new URLSearchParams({
-      action: "TEMPLATE",
-      text: event.title,
-      dates: `${start}/${end}`,
-      details: event.description || "Join us for this event!",
-      location: event.location,
-    });
-    return `https://www.google.com/calendar/render?${params.toString()}`;
-  };
-
-  const handleMarkAsRead = async (regId) => {
-    try {
-      await axios.patch(`/api/v1/registrations/${regId}/student-read`);
-      setRegistrations((prev) =>
-        prev.map((r) => (r._id === regId ? { ...r, isStudentRead: true } : r)),
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-    } catch (error) {
-      console.error("Failed to mark as read", error);
-    }
-  };
-
-  const handleDownloadAdmitCard = async (regId, eventTitle) => {
-    try {
-      if (!regId) return toast.error("Invalid registration ID");
-      const title = eventTitle || "Event";
-
-      const response = await axios.get(
-        `/api/v1/registrations/${regId}/download-admit-card`,
-        {
-          responseType: "blob",
-        },
-      );
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute(
-        "download",
-        `AdmitCard-${title.replace(/\s+/g, "_")}.pdf`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (error) {
-      console.error("Admit card download error:", error);
-      if (
-        error.response &&
-        error.response.data &&
-        error.response.data.type === 'application/json'
-      ) {
-        // Since responseType is blob, read the blob as text to parse the JSON error
-        const reader = new FileReader();
-        reader.onload = () => {
-          const errMsg = JSON.parse(reader.result).message;
-          toast.error(errMsg || "Failed to download admit card");
-        };
-        reader.readAsText(error.response.data);
-      } else {
-        toast.error("Failed to download admit card");
-      }
-    }
-  };
-
-  const handleDownloadCertificate = async (regId, eventTitle) => {
-    try {
-      if (!regId) return toast.error("Invalid registration ID");
-      const title = eventTitle || "Event";
-
-      const response = await axios.get(
-        `/api/v1/registrations/${regId}/download-certificate`,
-        {
-          responseType: "blob",
-        },
-      );
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute(
-        "download",
-        `Certificate-${title.replace(/\s+/g, "_")}.pdf`,
-      );
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (error) {
-      console.error("Certificate download error:", error);
-      if (
-        error.response &&
-        error.response.data &&
-        error.response.data.type === 'application/json'
-      ) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const errMsg = JSON.parse(reader.result).message;
-          toast.error(errMsg || "Failed to download certificate");
-        };
-        reader.readAsText(error.response.data);
-      } else {
-        toast.error("Failed to download certificate");
-      }
-    }
-  };
-
   const stats = [
     {
       title: "Total Events",
-      value: upcomingEvents.length.toString(),
+      value: totalEventsCount.toString(),
       icon: CalendarIcon,
       trend: { value: 12, label: "all time" },
     },
     {
       title: "Upcoming Events",
-      value: upcomingEvents
-        .filter((e) => new Date(e.startDate) > new Date())
-        .length.toString(),
+      value: upcomingEventsCount.toString(),
       icon: ClockIcon,
       trend: { value: 2, label: "this week" },
     },
@@ -374,24 +284,93 @@ const Dashboard = () => {
       trend: { value: 12, label: "this month" },
     },
   ];
+
+  const CalendarModal = () => {
+    const [currentDate] = useState(new Date());
+    const daysInMonth = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth() + 1,
+      0,
+    ).getDate();
+    const firstDayOfMonth = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth(),
+      1,
+    ).getDay();
+    const days = [];
+    for (let i = 0; i < firstDayOfMonth; i++) days.push(null);
+    for (let i = 1; i <= daysInMonth; i++) days.push(i);
+
+    if (!isCalendarOpen) return null;
+
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-secondary-900/60">
+        <div className="bg-white rounded-[2.5rem] p-10 w-full max-w-sm shadow-2xl border border-secondary-100 animate-in fade-in zoom-in duration-200">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h2 className="text-2xl font-black text-secondary-900 uppercase tracking-tighter">
+                {currentDate.toLocaleString("default", { month: "long" })}
+              </h2>
+              <span className="text-[10px] font-black text-primary-500 uppercase tracking-[0.2em]">
+                {currentDate.getFullYear()} Event Schedule
+              </span>
+            </div>
+            <button
+              onClick={() => setIsCalendarOpen(false)}
+              className="p-3 hover:bg-secondary-50 rounded-2xl transition-colors group"
+            >
+              <XMarkIcon className="w-6 h-6 text-secondary-300 group-hover:text-red-500" />
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-2 text-center mb-4">
+            {["S", "M", "T", "W", "T", "F", "S"].map((d) => (
+              <span
+                key={d}
+                className="text-[10px] font-black text-secondary-300 uppercase tracking-widest"
+              >
+                {d}
+              </span>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-2">
+            {days.map((day, idx) => (
+              <div
+                key={idx}
+                className={`h-11 flex items-center justify-center rounded-xl text-xs font-black transition-all ${day === new Date().getDate() && currentDate.getMonth() === new Date().getMonth() ? "bg-primary-600 text-white shadow-lg" : day ? "text-secondary-600 hover:bg-secondary-50 cursor-pointer" : ""}`}
+              >
+                {day}
+              </div>
+            ))}
+          </div>
+          <div className="mt-10">
+            <Button
+              onClick={() => setIsCalendarOpen(false)}
+              className="w-full rounded-[1.25rem] py-4 bg-secondary-900 text-white hover:bg-black font-black uppercase text-[10px] tracking-widest"
+            >
+              Back to Dashboard
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-secondary-50 pb-12">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-12 py-8">
         <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-secondary-900 font-display">
-              {user.role === "student"
-                ? "Student Dashboard"
-                : "Organizer Dashboard"}
+            <h1 className="text-3xl font-black text-secondary-900 uppercase tracking-tight font-display">
+              {user.role === "student" ? "Student Hub" : "Organizer Dashboard"}
             </h1>
-            <p className="text-secondary-500 mt-1">
-              Welcome back, {user.name.split(" ")[0]}! Here's what's happening.
+            <p className="text-secondary-500 mt-1 font-medium italic opacity-70">
+              Welcome back, {user.name.split(" ")[0]}!
             </p>
           </div>
           <Button
             variant="primary"
             onClick={() => navigate("/events")}
-            className="rounded-2xl shadow-lg ring-primary-500/20 hover:ring-8 transition-all"
+            className="rounded-2xl shadow-lg shadow-primary-500/20 px-8"
           >
             <SparklesIcon className="w-5 h-5 mr-2" />
             Explore Events
@@ -401,7 +380,11 @@ const Dashboard = () => {
         {(user.role === "collegeAdmin" || user.role === "superAdmin") && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {stats.map((stat, index) => (
-              <StatsCard key={index} {...stat} />
+              <StatsCard
+                key={index}
+                {...stat}
+                className="bg-white border-none shadow-md rounded-[2rem] p-6"
+              />
             ))}
           </div>
         )}
@@ -420,35 +403,24 @@ const Dashboard = () => {
                         .catch(console.error);
                     }
                   }}
-                  className={`pb-4 text-sm font-bold transition-all relative ${
-                    activeTab === "Upcoming"
-                      ? "text-primary-600 border-b-2 border-primary-600"
-                      : "text-secondary-400 hover:text-secondary-600"
-                  }`}
+                  className={`pb-4 text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === "Upcoming" ? "text-primary-600 border-b-2 border-primary-600" : "text-secondary-400 hover:text-secondary-600"}`}
                 >
                   Upcoming Events
                   {hasNewEvents && (
-                    <span className="absolute top-0 -right-2 flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                    </span>
+                    <span className="absolute top-0 -right-2 h-2 w-2 bg-blue-500 rounded-full animate-pulse shadow-blue-400/50 shadow-sm" />
                   )}
                 </button>
                 {user.role === "student" && (
                   <button
-                    onClick={() => setActiveTab("Registered")}
-                    className={`pb-4 text-sm font-bold transition-all relative ${
-                      activeTab === "Registered"
-                        ? "text-primary-600 border-b-2 border-primary-600"
-                        : "text-secondary-400 hover:text-secondary-600"
-                    }`}
+                    onClick={() => {
+                      setActiveTab("Registered");
+                      setUnreadCount(0); // Mark as read from dashboard UI
+                    }}
+                    className={`pb-4 text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === "Registered" ? "text-primary-600 border-b-2 border-primary-600" : "text-secondary-400 hover:text-secondary-600"}`}
                   >
-                    My Registered Events
+                    My Registrations
                     {unreadCount > 0 && (
-                      <span className="absolute top-0 -right-2 flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                      </span>
+                      <span className="absolute top-0 -right-2 h-2 w-2 bg-red-500 rounded-full animate-pulse shadow-red-400/50 shadow-sm" />
                     )}
                   </button>
                 )}
@@ -457,9 +429,9 @@ const Dashboard = () => {
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate("/events")}
-                className="font-bold text-primary-600 pb-4"
+                className="font-black text-primary-600 text-[10px] uppercase tracking-widest pb-4"
               >
-                View All
+                View All →
               </Button>
             </div>
 
@@ -476,68 +448,45 @@ const Dashboard = () => {
                       <Card
                         key={event._id}
                         onClick={() => handleEventClick(event)}
-                        className="p-4 flex flex-col sm:flex-row gap-5 hover:border-primary-300 transition-all cursor-pointer group shadow-sm hover:shadow-xl bg-white/80 backdrop-blur-sm"
+                        className="p-5 flex flex-col sm:flex-row gap-5 hover:border-primary-300 transition-all cursor-pointer group shadow-sm hover:shadow-xl bg-white rounded-[2rem] border border-secondary-100"
                       >
-                        {/* Event Card Content (Existing) */}
                         <div className="flex-shrink-0 w-full sm:w-20 h-20 bg-primary-50 rounded-2xl flex flex-col items-center justify-center text-primary-700 group-hover:bg-primary-600 group-hover:text-white transition-all duration-300">
                           <span className="text-[10px] font-black uppercase tracking-widest opacity-80">
                             {new Date(event.startDate).toLocaleDateString(
                               "en-US",
-                              {
-                                month: "short",
-                              },
+                              { month: "short" },
                             )}
                           </span>
                           <span className="text-2xl font-black leading-none mt-1">
                             {new Date(event.startDate).getDate()}
                           </span>
                         </div>
-
                         <div className="flex-grow py-1">
-                          <div className="flex items-start justify-between mb-1.5">
+                          <div className="flex items-start justify-between mb-2">
                             <span
-                              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${getCategoryColor(
-                                event.category,
-                              )} shadow-sm`}
+                              className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${getCategoryColor(event.category)} shadow-sm`}
                             >
                               {event.category}
                             </span>
-                            <div className="flex gap-2">
-                              {new Date() > new Date(event.endDate) && (
-                                <div className="flex items-center gap-1.5 bg-red-50 text-red-600 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter border border-red-100">
-                                  Completed
-                                </div>
-                              )}
-                              <div className="flex items-center gap-1.5 bg-success/10 text-success px-2 py-0.5 rounded-full text-[10px] font-black">
-                                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
-                                FREE
-                              </div>
+                            <div className="flex items-center gap-1.5 bg-success/10 text-success px-2 py-0.5 rounded-full text-[9px] font-black border border-success/10 uppercase tracking-tighter">
+                              FREE
                             </div>
                           </div>
-                          <h3 className="text-xl font-bold text-secondary-900 group-hover:text-primary-600 transition-colors">
+                          <h3 className="text-xl font-black text-secondary-900 group-hover:text-primary-600 transition-colors uppercase tracking-tight">
                             {event.title}
                           </h3>
-                          <div className="flex items-center text-xs text-secondary-500 gap-5 mt-2 font-medium">
+                          <div className="flex items-center text-[10px] font-bold text-secondary-400 gap-5 mt-2 uppercase tracking-wide">
                             <div className="flex items-center gap-1.5">
-                              <ClockIcon className="w-4 h-4 text-primary-500" />
+                              <ClockIcon className="w-3.5 h-3.5 text-primary-500" />
                               {new Date(event.startDate).toLocaleTimeString(
                                 [],
-                                {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                },
+                                { hour: "2-digit", minute: "2-digit" },
                               )}
                             </div>
                             <div className="flex items-center gap-1.5">
-                              <MapPinIcon className="w-4 h-4 text-primary-500" />
+                              <MapPinIcon className="w-3.5 h-3.5 text-primary-500" />
                               {event.location}
                             </div>
-                          </div>
-                        </div>
-
-                        <div className="flex-shrink-0 flex items-center pr-2">
-                          <div className="w-10 h-10 rounded-full border border-secondary-100 flex items-center justify-center group-hover:bg-primary-50 group-hover:border-primary-200 transition-all">
-                            <CalendarIcon className="w-5 h-5 text-secondary-400 group-hover:text-primary-600" />
                           </div>
                         </div>
                       </Card>
@@ -545,220 +494,159 @@ const Dashboard = () => {
                   : registrations.map((reg) => (
                       <Card
                         key={reg._id}
-                        onMouseEnter={() =>
-                          !reg.isStudentRead && handleMarkAsRead(reg._id)
-                        }
-                        className={`p-5 hover:border-primary-300 transition-all shadow-sm bg-white/80 backdrop-blur-sm relative overflow-hidden ${!reg.isStudentRead ? "border-l-4 border-l-primary-500" : ""}`}
+                        className="p-5 hover:border-primary-300 transition-all shadow-sm bg-white rounded-[2rem] border border-secondary-100 group"
                       >
-                        {!reg.isStudentRead && (
-                          <div className="absolute top-0 right-0">
-                            <div className="bg-primary-500 text-white text-[8px] font-bold px-2 py-0.5 rounded-bl-lg">
-                              NEW UPDATE
-                            </div>
-                          </div>
-                        )}
                         <div className="flex flex-col sm:flex-row gap-5">
                           <div className="flex-shrink-0 w-full sm:w-16 h-16 bg-secondary-50 rounded-xl flex items-center justify-center overflow-hidden">
-                            {reg.eventId.image ? (
-                              <img
-                                src={reg.eventId.image}
-                                alt={reg.eventId?.title || "Event"}
+                             <img
+                                src={reg.eventId?.image || getCategoryImage(reg.eventId?.category)}
+                                alt="Event"
                                 className="w-full h-full object-cover"
                               />
-                            ) : (
-                              <TicketIcon className="w-8 h-8 text-secondary-300" />
-                            )}
                           </div>
-                          <div className="flex-grow">
-                            <div className="flex items-start justify-between mb-1">
-                              <h3 className="font-bold text-secondary-900">
-                                {reg.eventId?.title || "Event"}
-                              </h3>
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm 
-                                ${
-                                  reg.status === "approved"
-                                    ? "bg-green-100 text-green-700"
-                                    : reg.status === "rejected"
-                                      ? "bg-red-100 text-red-700"
-                                      : "bg-orange-100 text-orange-700"
-                                }`}
-                              >
-                                {reg.status}
-                              </span>
-                            </div>
-                            <div className="flex items-center text-[10px] font-bold text-secondary-500 gap-4 mt-1">
-                              <div className="flex items-center gap-1">
-                                <ClockIcon className="w-3.5 h-3.5 text-primary-500" />
-                                {new Date(
-                                  reg.eventId.startDate,
-                                ).toLocaleDateString()}
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <MapPinIcon className="w-3.5 h-3.5 text-primary-500" />
-                                {reg.eventId.location}
-                              </div>
-                            </div>
-                            <p className="text-[10px] text-secondary-400 mt-2">
-                              Organized by:{" "}
-                              <span className="text-secondary-600">
-                                {reg.adminId.college}
-                              </span>
-                            </p>
-                            {reg.status === "approved" && (
-                              <div className="flex flex-wrap gap-4 mt-4">
-                                <a
-                                  href={getGoogleCalendarUrl(reg.eventId)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-[10px] font-black uppercase tracking-widest text-white rounded-xl transition-all shadow-sm hover:shadow-md"
-                                >
-                                  <SparklesIcon className="w-3.5 h-3.5" />
-                                  Add to Calendar
-                                </a>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDownloadAdmitCard(
-                                      reg._id,
-                                      reg.eventId?.title || "Event",
-                                    );
-                                  }}
-                                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-[10px] font-black uppercase tracking-widest text-white rounded-xl transition-all shadow-sm hover:shadow-md"
-                                >
-                                  <ArrowDownTrayIcon className="w-3.5 h-3.5" />
-                                  Admit Card
-                                </button>
-                                {reg.isCertificateIssued && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDownloadCertificate(
-                                        reg._id,
-                                        reg.eventId?.title || "Event",
-                                      );
-                                    }}
-                                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-[10px] font-black uppercase tracking-widest text-white rounded-xl transition-all shadow-sm hover:shadow-md"
-                                  >
-                                    <AcademicCapIcon className="w-3.5 h-3.5" />
-                                    Certificate
-                                  </button>
-                                )}
-                              </div>
-                            )}
-
-                            <div className="flex gap-4 mt-3 border-t border-secondary-50 pt-3">
-                              <span
-                                className={`flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider ${
-                                  reg.attendanceStatus === "present"
-                                    ? "text-success"
-                                    : reg.attendanceStatus === "pending"
-                                      ? "text-orange-500"
-                                      : "text-secondary-400"
-                                }`}
-                              >
-                                <CheckCircleIcon className="w-3.5 h-3.5" />
-                                Attendance: {reg.attendanceStatus}
-                              </span>
-                              {reg.isCertificateIssued && (
-                                <span className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider text-blue-600">
-                                  <AcademicCapIcon className="w-3.5 h-3.5" />
-                                  Certificate Issued
+                          <div className="flex-grow min-w-0">
+                            <h3 className="font-black text-secondary-900 uppercase tracking-tight leading-none truncate mb-2">
+                              {reg.eventId?.title}
+                            </h3>
+                            <div className="space-y-3">
+                              <p className="text-[10px] font-bold text-secondary-400 uppercase tracking-widest">
+                                ID:{" "}
+                                <span className="text-secondary-900">
+                                  {reg._id.slice(-6).toUpperCase()}
                                 </span>
-                              )}
+                              </p>
+                              <div className="inline-block">
+                                <span
+                                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest ${reg.status === "approved" ? "bg-green-100 text-green-700" : reg.status === "rejected" ? "bg-red-100 text-red-700" : "bg-orange-100 text-orange-700"}`}
+                                >
+                                  {reg.status}
+                                </span>
+                              </div>
                             </div>
+                          </div>
+                          <div className="flex flex-row gap-2 self-center sm:self-end mt-4 sm:mt-0">
+                             <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                 setSelectedEvent(reg.eventId);
+                                 setIsDetailsOpen(true);
+                              }}
+                              className="w-10 h-10 p-0 text-primary-600 hover:bg-primary-50 rounded-xl transition-all"
+                              title="Quick View"
+                            >
+                              <EyeIcon className="w-5 h-5" />
+                            </Button>
+                            {reg.status === "approved" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDownloadAdmitCard(reg._id)}
+                                className="w-10 h-10 p-0 border-secondary-100 text-secondary-600 hover:border-primary-500 hover:text-primary-600 rounded-xl transition-all"
+                                title="Download Admit Card"
+                              >
+                                <TicketIcon className="w-5 h-5" />
+                              </Button>
+                            )}
+                            {reg.isCertificateIssued && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => handleDownloadCertificate(reg._id)}
+                                className="w-10 h-10 p-0 bg-primary-600 hover:bg-black text-white rounded-xl shadow-lg shadow-primary-500/10 transition-all"
+                                title="Download Certificate"
+                              >
+                                <AcademicCapIcon className="w-5 h-5" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </Card>
                     ))}
-
-              {!loading &&
-                activeTab === "Registered" &&
-                registrations.length === 0 && (
-                  <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-secondary-200">
-                    <TicketIcon className="w-12 h-12 text-secondary-200 mx-auto mb-3" />
-                    <p className="text-secondary-500 font-medium">
-                      You haven't registered for any events yet.
-                    </p>
-                    <Button
-                      variant="ghost"
-                      className="mt-2 text-primary-600"
-                      onClick={() => navigate("/events")}
-                    >
-                      Explore Events
-                    </Button>
-                  </div>
-                )}
             </div>
           </div>
 
           <div className="space-y-6">
             {user.role === "collegeAdmin" || user.role === "superAdmin" ? (
-              <div className="bg-gradient-to-br from-primary-600 to-primary-800 rounded-[2rem] p-7 text-white shadow-2xl relative overflow-hidden group">
-                <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
-                <h3 className="text-xl font-black mb-1 relative z-10 tracking-tight">
-                  Quick Actions
-                </h3>
-                <p className="text-primary-100/80 text-sm mb-8 relative z-10 font-medium">
-                  Manage your event activities effortlessly.
-                </p>
-                <div className="space-y-3 relative z-10">
-                  <button className="w-full bg-white/10 hover:bg-white text-white hover:text-primary-700 border border-white/20 rounded-2xl p-4 flex items-center transition-all duration-300 font-bold group/btn shadow-inner">
-                    <CalendarIcon className="w-5 h-5 mr-3 group-hover/btn:scale-110 transition-transform" />
-                    My Calendar
-                  </button>
-                  <button className="w-full bg-white/10 hover:bg-white text-white hover:text-primary-700 border border-white/20 rounded-2xl p-4 flex items-center transition-all duration-300 font-bold group/btn shadow-inner">
-                    <ClipboardDocumentCheckIcon className="w-5 h-5 mr-3 group-hover/btn:scale-110 transition-transform" />
-                    Registrations
-                  </button>
+              <div className="relative bg-primary-600 rounded-[2.5rem] p-8 overflow-hidden shadow-2xl border border-primary-500">
+                <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 bg-white/10 rounded-full blur-3xl" />
+                <div className="relative z-10">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-primary-600 shadow-lg">
+                      <SparklesIcon className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-xl font-black text-white uppercase tracking-tight">
+                      Quick Actions
+                    </h3>
+                  </div>
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => setIsCalendarOpen(true)}
+                      className="w-full bg-primary-700 hover:bg-white text-white hover:text-primary-700 border border-primary-500 rounded-2xl p-4 flex items-center transition-all duration-300 font-black uppercase text-[10px] tracking-widest group shadow-lg"
+                    >
+                      <CalendarIcon className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform" />
+                      My Calendar
+                    </button>
+                    <button
+                      onClick={() =>
+                        navigate("/admin", {
+                          state: { activeTab: "Registrations" },
+                        })
+                      }
+                      className="w-full bg-primary-700 hover:bg-white text-white hover:text-primary-700 border border-primary-500 rounded-2xl p-4 flex items-center transition-all duration-300 font-black uppercase text-[10px] tracking-widest group shadow-lg"
+                    >
+                      <ClipboardDocumentCheckIcon className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform" />
+                      Registrations
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
-              <div className="bg-white rounded-[2rem] p-7 border border-secondary-100 shadow-sm relative overflow-hidden">
+              <div className="bg-white rounded-[2.5rem] p-8 border border-secondary-100 shadow-sm relative overflow-hidden">
                 <div className="absolute -right-4 -top-4 w-24 h-24 bg-primary-50 rounded-full blur-2xl" />
-                <h3 className="text-xl font-black text-secondary-900 mb-2 relative z-10">
+                <h3 className="text-xl font-black text-secondary-900 mb-6 uppercase tracking-tight">
                   Your Stats
                 </h3>
-                <div className="flex flex-col gap-4 relative z-10 mt-6">
-                  <div className="bg-secondary-50 p-4 rounded-2xl flex items-center justify-between group/stat">
+                <div className="space-y-4 relative z-10">
+                  <div className="bg-secondary-50 p-5 rounded-2xl flex items-center justify-between group cursor-default shadow-inner">
                     <div>
-                      <p className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">
+                      <p className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-1 leading-none">
                         Attended
                       </p>
-                      <p className="text-2xl font-black text-secondary-900 mt-1">
-                        0
+                      <p className="text-2xl font-black text-secondary-900 tracking-tighter leading-none">
+                        {attendedCount}
                       </p>
                     </div>
-                    <CalendarIcon className="w-8 h-8 text-primary-200 group-hover/stat:text-primary-500 transition-colors" />
+                    <CheckCircleIcon className="w-8 h-8 text-primary-200 group-hover:text-primary-600 transition-colors" />
+                  </div>
+                  <div className="bg-secondary-50 p-5 rounded-2xl flex items-center justify-between group cursor-default shadow-inner">
+                    <div>
+                      <p className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-1 leading-none">
+                        Registered
+                      </p>
+                      <p className="text-2xl font-black text-secondary-900 tracking-tighter leading-none">
+                        {regCount}
+                      </p>
+                    </div>
+                    <TicketIcon className="w-8 h-8 text-primary-200 group-hover:text-primary-600 transition-colors" />
                   </div>
                 </div>
               </div>
             )}
 
-            <Card className="p-7 rounded-[2rem] border-secondary-100 shadow-sm bg-white/50 backdrop-blur-sm">
-              <h3 className="text-xl font-black text-secondary-900 mb-8 tracking-tight">
+            <Card className="p-8 rounded-[2.5rem] border-secondary-100 shadow-sm bg-white">
+              <h3 className="text-xl font-black text-secondary-900 mb-8 uppercase tracking-tight">
                 Recent Activity
               </h3>
               <div className="space-y-6">
                 {activities.map((act, i) => (
-                  <div key={i} className="flex items-start gap-4 group">
-                    <div className="relative">
-                      <div className="w-3 h-3 mt-1.5 rounded-full bg-primary-500 ring-4 ring-primary-50 flex-shrink-0 group-hover:scale-125 transition-transform duration-300 z-10 relative" />
-                      {i !== activities.length - 1 && (
-                        <div className="absolute top-4 left-[5.5px] w-[1px] h-12 bg-secondary-100" />
-                      )}
-                    </div>
+                  <div key={i} className="flex items-start gap-4 group italic">
+                    <div className="w-2 h-2 mt-1.5 rounded-full bg-primary-500 shadow-sm" />
                     <div className="flex-grow">
-                      <p className="text-sm text-secondary-700 leading-relaxed font-medium">
-                        {act.action}{" "}
-                        {act.target && (
-                          <span className="font-black text-primary-600 hover:underline cursor-pointer">
-                            "{act.target}"
-                          </span>
-                        )}
+                      <p className="text-xs font-bold text-secondary-700 leading-snug">
+                        {act.action}
                       </p>
-                      <p className="text-[10px] font-black text-secondary-400 uppercase mt-1.5 tracking-widest flex items-center gap-1.5">
+                      <p className="text-[9px] font-black text-secondary-400 uppercase tracking-widest mt-1.5 flex items-center gap-1.5 opacity-70">
                         <ClockIcon className="w-3 h-3" />
                         {getTimeAgo(act.timestamp)}
                       </p>
@@ -766,30 +654,28 @@ const Dashboard = () => {
                   </div>
                 ))}
                 {activities.length === 0 && (
-                  <div className="text-center py-8">
-                    <div className="w-12 h-12 bg-secondary-50 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <SparklesIcon className="w-6 h-6 text-secondary-300" />
-                    </div>
-                    <p className="text-sm text-secondary-400 font-medium">
-                      No recent activity yet
-                    </p>
-                  </div>
+                  <p className="text-center text-xs text-secondary-400 font-bold uppercase py-10 opacity-50 tracking-widest">
+                    No Activity Yet
+                  </p>
                 )}
               </div>
             </Card>
           </div>
         </div>
       </div>
-
       <EventDetailsModal
         isOpen={isDetailsOpen}
-        onClose={() => setIsDetailsOpen(false)}
+        onClose={() => {
+          setIsDetailsOpen(false);
+          setSelectedEvent(null);
+        }}
         event={selectedEvent}
+        user={user}
+        onRegister={fetchDashboardData}
       />
-
+      <CalendarModal />
       <LaraChatbot user={user} />
     </div>
   );
 };
-
 export default Dashboard;
