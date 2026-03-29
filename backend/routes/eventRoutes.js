@@ -3,8 +3,6 @@ const eventController = require('../controllers/eventController');
 const userController = require('../controllers/userController');
 
 const router = express.Router();
-router
-  .get('/suggestions', eventController.getSuggestions);
 
 router
   .route('/')
@@ -15,8 +13,6 @@ router
     eventController.uploadEventImage,
     eventController.createEvent,
   );
-
-
 
 router
   .route('/:id')
@@ -32,5 +28,12 @@ router
     userController.restrictTo('collegeAdmin', 'superAdmin'),
     eventController.deleteEvent,
   );
+
+router.get(
+  '/:id/export-participants',
+  userController.protect,
+  userController.restrictTo('collegeAdmin', 'superAdmin'),
+  eventController.exportParticipants
+);
 
 module.exports = router;

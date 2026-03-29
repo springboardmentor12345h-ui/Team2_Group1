@@ -1,0 +1,168 @@
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+
+:root {
+  --primary: #7c3aed;
+  --primary-light: #f5f3ff;
+  --secondary: #64748b;
+  --bg-main: #ffffff;
+  --bg-soft: #f8fafc;
+  --text-main: #0f172a;
+  --text-soft: #475569;
+}
+
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
+.landing-root {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family: "Plus Jakarta Sans", sans-serif;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Background Universe - Light Theme */
+.universe-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(circle at 0% 0%, #f5f3ff 0%, #ffffff 100%);
+  pointer-events: none;
+}
+
+.stars-overlay {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(2px 2px at 50px 100px, #7c3aed 0.1, transparent 0.1),
+    radial-gradient(2px 2px at 150px 250px, #7c3aed 0.1, transparent 0.1),
+    radial-gradient(2px 2px at 300px 150px, #7c3aed 0.1, transparent 0.1);
+  background-size: 400px 400px;
+  opacity: 0.15;
+}
+
+.neon-grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    linear-gradient(rgba(124, 58, 237, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 58, 237, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  opacity: 0.4;
+}
+
+/* Particles Container */
+.particles-container {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Regular Scrolling Sections */
+.landing-section {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8rem 2rem;
+  z-index: 10;
+}
+
+/* Typography */
+.mega-title {
+  font-family: "Outfit", sans-serif;
+  font-weight: 900;
+  font-size: clamp(3.5rem, 9vw, 7rem);
+  line-height: 1.05;
+  text-align: center;
+  color: #0f172a;
+  letter-spacing: -0.05em;
+}
+
+/* Glass Cards - Light Mode */
+.glass-card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(124, 58, 237, 0.1);
+  border-radius: 32px;
+  padding: 2.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.glass-card:hover {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--primary);
+  transform: translateY(-8px);
+  box-shadow: 0 20px 50px -12px rgba(124, 58, 237, 0.15);
+}
+
+/* CTA Glow button */
+.glow-btn {
+  background: var(--primary);
+  color: #fff;
+  padding: 1.25rem 3.5rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 10px 30px rgba(124, 58, 237, 0.3);
+  border: none;
+}
+
+.glow-btn:hover {
+  transform: scale(1.05) translateY(-2px);
+  box-shadow: 0 15px 40px rgba(124, 58, 237, 0.4);
+}
+
+.spotlight {
+  position: absolute;
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(
+    circle,
+    rgba(124, 58, 237, 0.05) 0%,
+    transparent 70%
+  );
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@media (max-width: 768px) {
+  .landing-section {
+    padding: 6rem 1.5rem;
+    min-height: auto;
+  }
+  .mega-title {
+    font-size: 2.75rem;
+  }
+}

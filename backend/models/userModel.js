@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
 const validator = require('validator');
 const bcrypt = require('bcryptjs');
-
+//user schema
 const userSchema = mongoose.Schema({
+  //
   name: {
     type: String,
     required: [true, 'Please provide your name!'],
@@ -41,6 +42,19 @@ const userSchema = mongoose.Schema({
     type: String,
     enum: ['student', 'collegeAdmin', 'superAdmin'],
     default: 'student',
+  },
+  adminPin: {
+    type: String,
+    select: false,
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'approved',
+  },
+  lastViewedEventsAt: {
+    type: Date,
+    default: Date.now,
   },
 });
 
